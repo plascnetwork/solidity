@@ -1020,6 +1020,7 @@ public:
         voteCount, ///< get vote count
         totalVoteCount, /// get total vote count
         totalReceivedVoteCount, /// get total received vote count
+        totalUsedVoteCount, /// get total used vote count
 		Log0,
 		Log1,
 		Log2,

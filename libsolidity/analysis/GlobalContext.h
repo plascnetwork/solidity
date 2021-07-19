@@ -70,6 +70,7 @@ private:
 	void addVoteCountMethod();
 	void addTotalVoteCountMethod();
 	void addTotalReceivedVoteCountMethod();
+    void addTotalUsedVoteCountMethod();
 };
 
 }

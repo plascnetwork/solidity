@@ -96,6 +96,7 @@ namespace dev
             addVoteCountMethod();
 	        addTotalVoteCountMethod();
 	        addTotalReceivedVoteCountMethod();
+	        addTotalUsedVoteCountMethod();
         }
 
         void GlobalContext::addVerifyMintProofMethod() {
@@ -516,6 +517,34 @@ namespace dev
                 false)
             ));
         }
+
+    void GlobalContext::addTotalUsedVoteCountMethod() {
+        // uint addTotalUsedVoteCount(address)
+        TypePointers parameterTypes;
+        parameterTypes.push_back(TypeProvider::address());
+
+        TypePointers returnParameterTypes;
+        returnParameterTypes.push_back(TypeProvider::uint256());
+        strings parameterNames;
+        parameterNames.push_back("address");
+        strings returnParameterNames;
+        returnParameterNames.push_back("result");
+
+        m_magicVariables.push_back(make_shared<MagicVariableDeclaration>("totalUsedVoteCount", TypeProvider::function(
+            parameterTypes,
+            returnParameterTypes,
+            parameterNames,
+            returnParameterNames,
+            FunctionType::Kind::totalUsedVoteCount,
+            false,
+            StateMutability::View,
+            nullptr,
+            false,
+            false,
+            false,
+            false)
+        ));
+    }
 
         void GlobalContext::setCurrentContract(ContractDefinition const& _contract)
         {

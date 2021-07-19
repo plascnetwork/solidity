@@ -2758,6 +2758,7 @@ string FunctionType::richIdentifier() const
         case Kind::voteCount: id += "voteCount"; break;
         case Kind::totalVoteCount: id += "totalVoteCount"; break;
         case Kind::totalReceivedVoteCount: id += "totalReceivedVoteCount"; break;
+        case Kind::totalUsedVoteCount: id += "totalUsedVoteCount"; break;
 	}
 	id += "_" + stateMutabilityToString(m_stateMutability);
 	id += identifierList(m_parameterTypes) + "returns" + identifierList(m_returnParameterTypes);
@@ -3169,6 +3170,7 @@ bool FunctionType::isBareCall() const
     case Kind::voteCount:
     case Kind::totalVoteCount:
     case Kind::totalReceivedVoteCount:
+    case Kind::totalUsedVoteCount:
 	case Kind::SHA256:
 	case Kind::RIPEMD160:
 		return true;
