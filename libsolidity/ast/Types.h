@@ -1019,8 +1019,8 @@ public:
         isSrCandidate, ///< Judge witness whether or not
         voteCount, ///< get vote count
         totalVoteCount, /// get total vote count
-        totalReceivedVoteCount, /// get total received vote count
-        totalUsedVoteCount, /// get total used vote count
+        receivedVoteCount, /// get total received vote count
+        usedVoteCount, /// get total used vote count
 		Log0,
 		Log1,
 		Log2,
