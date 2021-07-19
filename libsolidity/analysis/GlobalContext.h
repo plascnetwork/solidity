@@ -68,7 +68,8 @@ private:
 	void addIsSRCandidateMethod();
 	void addVoteCountMethod();
 	void addTotalVoteCountMethod();
-	void addTotalReceivedVoteCountMethod();
+	void addReceivedVoteCountMethod();
+	void addUsedVoteCountMethod();
 };
 
 }
