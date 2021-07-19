@@ -1005,7 +1005,8 @@ bool ExpressionCompiler::visit(FunctionCall const& _functionCall)
 		case FunctionType::Kind::isSrCandidate:
 		case FunctionType::Kind::voteCount:
 		case FunctionType::Kind::totalVoteCount:
-		case FunctionType::Kind::totalReceivedVoteCount:
+		case FunctionType::Kind::receivedVoteCount:
+		case FunctionType::Kind::usedVoteCount:
 		{
 			_functionCall.expression().accept(*this);
 			static map<FunctionType::Kind, u256> const contractAddresses{
@@ -1021,8 +1022,9 @@ bool ExpressionCompiler::visit(FunctionCall const& _functionCall)
 				{FunctionType::Kind::rewardBalance, 16777221},
 				{FunctionType::Kind::isSrCandidate, 16777222},
 				{FunctionType::Kind::voteCount, 16777223},
-				{FunctionType::Kind::totalVoteCount, 16777224},
-				{FunctionType::Kind::totalReceivedVoteCount, 16777225}
+				{FunctionType::Kind::usedVoteCount, 16777224},
+				{FunctionType::Kind::receivedVoteCount, 16777225},
+				{FunctionType::Kind::totalVoteCount, 16777226}
 			};
 			m_context << contractAddresses.at(function.kind());
 			for (unsigned i = function.sizeOnStack(); i > 0; --i)
@@ -1539,7 +1541,8 @@ bool ExpressionCompiler::visit(MemberAccess const& _memberAccess)
 				case FunctionType::Kind::isSrCandidate:
 				case FunctionType::Kind::voteCount:
 				case FunctionType::Kind::totalVoteCount:
-				case FunctionType::Kind::totalReceivedVoteCount:
+				case FunctionType::Kind::receivedVoteCount:
+				case FunctionType::Kind::usedVoteCount:
 				case FunctionType::Kind::SHA256:
 				case FunctionType::Kind::RIPEMD160:
 				default:
@@ -2524,7 +2527,8 @@ void ExpressionCompiler::appendExternalFunctionCall(
 	|| _functionType.kind() == FunctionType::Kind::isSrCandidate
 	|| _functionType.kind() == FunctionType::Kind::voteCount
 	|| _functionType.kind() == FunctionType::Kind::totalVoteCount
-	|| _functionType.kind() == FunctionType::Kind::totalReceivedVoteCount
+	|| _functionType.kind() == FunctionType::Kind::receivedVoteCount
+	|| _functionType.kind() == FunctionType::Kind::usedVoteCount
 	)
 		// This would be the only combination of padding and in-place encoding,
 		// but all parameters of ecrecover are value types anyway.
