@@ -1385,7 +1385,7 @@ bool ExpressionCompiler::visit(FunctionCall const& _functionCall)
 				m_context << Instruction::DUP1 << Instruction::MLOAD;
 			}
 			m_context << Instruction::NATIVEVOTE;
-			m_context << Instruction::DUP1 << Instruction::ISZERO;
+			m_context << Instruction::ISZERO;
 			m_context.appendConditionalRevert(true);
 			break;
 		}
