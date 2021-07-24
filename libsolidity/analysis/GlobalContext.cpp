@@ -356,12 +356,10 @@ namespace dev
             parameterTypes.push_back(TypeProvider::array(DataLocation::Memory, TypeProvider::uint256()));
 
             TypePointers returnParameterTypes;
-            returnParameterTypes.push_back(TypeProvider::boolean());
             strings parameterNames;
             parameterNames.push_back("srList");
             parameterNames.push_back("tronpowerList");
             strings returnParameterNames;
-            returnParameterNames.push_back("ok");
 
             m_magicVariables.push_back(make_shared<MagicVariableDeclaration>("vote", TypeProvider::function(
                     parameterTypes,
