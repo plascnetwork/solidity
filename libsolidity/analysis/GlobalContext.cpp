@@ -401,19 +401,17 @@ inline vector<shared_ptr<MagicVariableDeclaration const>> constructMagicVariable
         }
 
 		void GlobalContext::addVoteMethod() {
-			// bool vote(address[] memory addresses, unit256[] tronpowerlist)
+			// void vote(address[] memory addresses, unit256[] tronpowerlist)
 			TypePointers parameterTypes;
 
 			parameterTypes.push_back(TypeProvider::array(DataLocation::Memory, TypeProvider::address()));
 			parameterTypes.push_back(TypeProvider::array(DataLocation::Memory, TypeProvider::uint256()));
 
 			TypePointers returnParameterTypes;
-			returnParameterTypes.push_back(TypeProvider::boolean());
 			strings parameterNames;
 			parameterNames.push_back("srList");
 			parameterNames.push_back("tronpowerList");
 			strings returnParameterNames;
-			returnParameterNames.push_back("ok");
 
 			m_magicVariables.push_back(make_shared<MagicVariableDeclaration>(magicVariableToID("vote"), "vote", TypeProvider::function(
 				parameterTypes,
