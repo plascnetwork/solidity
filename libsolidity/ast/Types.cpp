@@ -2751,6 +2751,14 @@ string FunctionType::richIdentifier() const
     	case Kind::Freeze: id += "freeze"; break;
     	case Kind::Unfreeze: id += "unfreeze"; break;
         case Kind::FreezeExpireTime: id += "freezeExpireTime"; break;
+        case Kind::vote: id += "vote"; break;
+	    case Kind::WithdrawReward: id += "withdrawreward"; break;
+        case Kind::rewardBalance: id += "rewardBalance"; break;
+        case Kind::isSrCandidate: id += "isSrCandidate"; break;
+        case Kind::voteCount: id += "voteCount"; break;
+        case Kind::totalVoteCount: id += "totalVoteCount"; break;
+        case Kind::receivedVoteCount: id += "receivedVoteCount"; break;
+        case Kind::usedVoteCount: id += "usedVoteCount"; break;
 	}
 	id += "_" + stateMutabilityToString(m_stateMutability);
 	id += identifierList(m_parameterTypes) + "returns" + identifierList(m_returnParameterTypes);
@@ -3157,6 +3165,12 @@ bool FunctionType::isBareCall() const
 	case Kind::verifyTransferProof:
 	case Kind::verifyMintProof:
 	case Kind::pedersenHash:
+    case Kind::rewardBalance:
+    case Kind::isSrCandidate:
+    case Kind::voteCount:
+    case Kind::totalVoteCount:
+    case Kind::receivedVoteCount:
+    case Kind::usedVoteCount:
 	case Kind::SHA256:
 	case Kind::RIPEMD160:
 		return true;
