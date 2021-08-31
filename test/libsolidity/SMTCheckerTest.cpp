@@ -27,23 +27,27 @@ using namespace solidity::frontend::test;
 
 SMTCheckerTest::SMTCheckerTest(string const& _filename): SyntaxTest(_filename, EVMVersion{})
 {
+	auto const& showUnproved = m_reader.stringSetting("SMTShowUnproved", "yes");
+	if (showUnproved == "no")
+		m_modelCheckerSettings.showUnproved = false;
+	else if (showUnproved == "yes")
+		m_modelCheckerSettings.showUnproved = true;
+	else
+		BOOST_THROW_EXCEPTION(runtime_error("Invalid SMT \"show unproved\" choice."));
+
 	auto const& choice = m_reader.stringSetting("SMTSolvers", "any");
 	if (choice == "any")
-		m_enabledSolvers = smtutil::SMTSolverChoice::All();
-	else if (choice == "z3")
-		m_enabledSolvers = smtutil::SMTSolverChoice::Z3();
-	else if (choice == "cvc4")
-		m_enabledSolvers = smtutil::SMTSolverChoice::CVC4();
+		m_modelCheckerSettings.solvers = smtutil::SMTSolverChoice::All();
 	else if (choice == "none")
-		m_enabledSolvers = smtutil::SMTSolverChoice::None();
-	else
+		m_modelCheckerSettings.solvers = smtutil::SMTSolverChoice::None();
+	else if (!m_modelCheckerSettings.solvers.setSolver(choice))
 		BOOST_THROW_EXCEPTION(runtime_error("Invalid SMT solver choice."));
 
-	auto available = ModelChecker::availableSolvers();
-	if (!available.z3)
-		m_enabledSolvers.z3 = false;
-	if (!available.cvc4)
-		m_enabledSolvers.cvc4 = false;
+	m_modelCheckerSettings.solvers &= ModelChecker::availableSolvers();
+
+	/// Underflow and Overflow are not enabled by default for Solidity >=0.8.7,
+	/// so we explicitly enable all targets for the tests.
+	m_modelCheckerSettings.targets = ModelCheckerTargets::All();
 
 	auto engine = ModelCheckerEngine::fromString(m_reader.stringSetting("SMTEngine", "all"));
 	if (engine)
@@ -51,7 +55,7 @@ SMTCheckerTest::SMTCheckerTest(string const& _filename): SyntaxTest(_filename, E
 	else
 		BOOST_THROW_EXCEPTION(runtime_error("Invalid SMT engine choice."));
 
-	if (m_enabledSolvers.none() || m_modelCheckerSettings.engine.none())
+	if (m_modelCheckerSettings.solvers.none() || m_modelCheckerSettings.engine.none())
 		m_shouldRun = false;
 
 	auto const& ignoreCex = m_reader.stringSetting("SMTIgnoreCex", "no");
@@ -66,7 +70,6 @@ SMTCheckerTest::SMTCheckerTest(string const& _filename): SyntaxTest(_filename, E
 TestCase::TestResult SMTCheckerTest::run(ostream& _stream, string const& _linePrefix, bool _formatted)
 {
 	setupCompiler();
-	compiler().setSMTSolverChoice(m_enabledSolvers);
 	compiler().setModelCheckerSettings(m_modelCheckerSettings);
 	parseAndAnalyze();
 	filterObtainedErrors();

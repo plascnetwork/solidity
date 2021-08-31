@@ -658,11 +658,20 @@ void IRGeneratorForStatements::endVisit(Return const& _return)
 	appendCode() << "leave\n";
 }
 
-void IRGeneratorForStatements::endVisit(UnaryOperation const& _unaryOperation)
+bool IRGeneratorForStatements::visit(UnaryOperation const& _unaryOperation)
 {
 	setLocation(_unaryOperation);
 	Type const& resultType = type(_unaryOperation);
 	Token const op = _unaryOperation.getOperator();
+
+	if (resultType.category() == Type::Category::RationalNumber)
+	{
+		define(_unaryOperation) << formatNumber(resultType.literalValue(nullptr)) << "\n";
+		return false;
+	}
+
+	_unaryOperation.subExpression().accept(*this);
+	setLocation(_unaryOperation);
 
 	if (op == Token::Delete)
 	{
@@ -689,8 +698,6 @@ void IRGeneratorForStatements::endVisit(UnaryOperation const& _unaryOperation)
 			m_currentLValue->kind
 		);
 	}
-	else if (resultType.category() == Type::Category::RationalNumber)
-		define(_unaryOperation) << formatNumber(resultType.literalValue(nullptr)) << "\n";
 	else if (resultType.category() == Type::Category::Integer)
 	{
 		solAssert(resultType == type(_unaryOperation.subExpression()), "Result type doesn't match!");
@@ -749,6 +756,8 @@ void IRGeneratorForStatements::endVisit(UnaryOperation const& _unaryOperation)
 	}
 	else
 		solUnimplementedAssert(false, "Unary operator not yet implemented");
+
+	return false;
 }
 
 bool IRGeneratorForStatements::visit(BinaryOperation const& _binOp)
@@ -1575,12 +1584,10 @@ void IRGeneratorForStatements::endVisit(MemberAccess const& _memberAccess)
 		define(IRVariable(_memberAccess).part("self"), _memberAccess.expression());
 		solAssert(*_memberAccess.annotation().requiredLookup == VirtualLookup::Static, "");
 		if (memberFunctionType->kind() == FunctionType::Kind::Internal)
-		{
-			auto const& functionDefinition = dynamic_cast<FunctionDefinition const&>(memberFunctionType->declaration());
-			define(IRVariable(_memberAccess).part("functionIdentifier")) << to_string(functionDefinition.id()) << "\n";
-			if (!_memberAccess.annotation().calledDirectly)
-				m_context.addToInternalDispatch(functionDefinition);
-		}
+			assignInternalFunctionIDIfNotCalledDirectly(
+				_memberAccess,
+				dynamic_cast<FunctionDefinition const&>(memberFunctionType->declaration())
+			);
 		else if (
 			memberFunctionType->kind() == FunctionType::Kind::ArrayPush ||
 			memberFunctionType->kind() == FunctionType::Kind::ArrayPop
@@ -1731,6 +1738,8 @@ void IRGeneratorForStatements::endVisit(MemberAccess const& _memberAccess)
 			define(_memberAccess) << "gasprice()\n";
 		else if (member == "chainid")
 			define(_memberAccess) << "chainid()\n";
+		else if (member == "basefee")
+			define(_memberAccess) << "basefee()\n";
 		else if (member == "data")
 		{
 			IRVariable var(_memberAccess);
@@ -1923,11 +1932,9 @@ void IRGeneratorForStatements::endVisit(MemberAccess const& _memberAccess)
 						*_memberAccess.annotation().referencedDeclaration
 					).resolveVirtual(m_context.mostDerivedContract(), super);
 
-				define(_memberAccess) << to_string(resolvedFunctionDef.id()) << "\n";
 				solAssert(resolvedFunctionDef.functionType(true), "");
 				solAssert(resolvedFunctionDef.functionType(true)->kind() == FunctionType::Kind::Internal, "");
-				if (!_memberAccess.annotation().calledDirectly)
-					m_context.addToInternalDispatch(resolvedFunctionDef);
+				assignInternalFunctionIDIfNotCalledDirectly(_memberAccess, resolvedFunctionDef);
 			}
 			else if (auto const* variable = dynamic_cast<VariableDeclaration const*>(_memberAccess.annotation().referencedDeclaration))
 					handleVariableReference(*variable, _memberAccess);
@@ -1939,11 +1946,7 @@ void IRGeneratorForStatements::endVisit(MemberAccess const& _memberAccess)
 					break;
 				case FunctionType::Kind::Internal:
 					if (auto const* function = dynamic_cast<FunctionDefinition const*>(_memberAccess.annotation().referencedDeclaration))
-					{
-						define(_memberAccess) << to_string(function->id()) << "\n";
-						if (!_memberAccess.annotation().calledDirectly)
-							m_context.addToInternalDispatch(*function);
-					}
+						assignInternalFunctionIDIfNotCalledDirectly(_memberAccess, *function);
 					else
 						solAssert(false, "Function not found in member access");
 					break;
@@ -2026,10 +2029,7 @@ void IRGeneratorForStatements::endVisit(MemberAccess const& _memberAccess)
 			solAssert(funType->kind() == FunctionType::Kind::Internal, "");
 			solAssert(*_memberAccess.annotation().requiredLookup == VirtualLookup::Static, "");
 
-			define(_memberAccess) << to_string(function->id()) << "\n";
-
-			if (!_memberAccess.annotation().calledDirectly)
-				m_context.addToInternalDispatch(*function);
+			assignInternalFunctionIDIfNotCalledDirectly(_memberAccess, *function);
 		}
 		else if (auto const* contract = dynamic_cast<ContractDefinition const*>(_memberAccess.annotation().referencedDeclaration))
 		{
@@ -2273,12 +2273,10 @@ void IRGeneratorForStatements::endVisit(Identifier const& _identifier)
 	{
 		solAssert(*_identifier.annotation().requiredLookup == VirtualLookup::Virtual, "");
 		FunctionDefinition const& resolvedFunctionDef = functionDef->resolveVirtual(m_context.mostDerivedContract());
-		define(_identifier) << to_string(resolvedFunctionDef.id()) << "\n";
 
 		solAssert(resolvedFunctionDef.functionType(true), "");
 		solAssert(resolvedFunctionDef.functionType(true)->kind() == FunctionType::Kind::Internal, "");
-		if (!_identifier.annotation().calledDirectly)
-			m_context.addToInternalDispatch(resolvedFunctionDef);
+		assignInternalFunctionIDIfNotCalledDirectly(_identifier, resolvedFunctionDef);
 	}
 	else if (VariableDeclaration const* varDecl = dynamic_cast<VariableDeclaration const*>(declaration))
 		handleVariableReference(*varDecl, _identifier);
@@ -2595,6 +2593,25 @@ void IRGeneratorForStatements::appendBareCall(
 	}
 
 	appendCode() << templ.render();
+}
+
+void IRGeneratorForStatements::assignInternalFunctionIDIfNotCalledDirectly(
+	Expression const& _expression,
+	FunctionDefinition const& _referencedFunction
+)
+{
+	solAssert(
+		dynamic_cast<MemberAccess const*>(&_expression) ||
+		dynamic_cast<Identifier const*>(&_expression),
+		""
+	);
+	if (_expression.annotation().calledDirectly)
+		return;
+
+	define(IRVariable(_expression).part("functionIdentifier")) <<
+		to_string(m_context.internalFunctionID(_referencedFunction, false)) <<
+		"\n";
+	m_context.addToInternalDispatch(_referencedFunction);
 }
 
 IRVariable IRGeneratorForStatements::convert(IRVariable const& _from, Type const& _to)

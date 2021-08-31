@@ -84,6 +84,7 @@ Global Variables
   to ``abi.encodeWithSelector(bytes4(keccak256(bytes(signature)), ...)```
 - ``bytes.concat(...) returns (bytes memory)``: :ref:`Concatenates variable number of
   arguments to one byte array<bytes-concat>`
+- ``block.basefee`` (``uint``): current block's base fee (`EIP-3198 <https://eips.ethereum.org/EIPS/eip-3198>`_ and `EIP-1559 <https://eips.ethereum.org/EIPS/eip-1559>`_)
 - ``block.chainid`` (``uint``): current chain id
 - ``block.coinbase`` (``address payable``): current block miner's address
 - ``block.difficulty`` (``uint``): current block difficulty
@@ -158,7 +159,8 @@ Global Variables
 Function Visibility Specifiers
 ==============================
 
-::
+.. code-block:: solidity
+    :force:
 
     function myFunction() <visibility specifier> returns (bool) {
         return true;
@@ -192,8 +194,8 @@ Reserved Keywords
 
 These keywords are reserved in Solidity. They might become part of the syntax in the future:
 
-``after``, ``alias``, ``apply``, ``auto``, ``case``, ``copyof``, ``default``,
-``define``, ``final``, ``immutable``, ``implements``, ``in``, ``inline``, ``let``, ``macro``, ``match``,
+``after``, ``alias``, ``apply``, ``auto``, ``byte``, ``case``, ``copyof``, ``default``,
+``define``, ``final``, ``implements``, ``in``, ``inline``, ``let``, ``macro``, ``match``,
 ``mutable``, ``null``, ``of``, ``partial``, ``promise``, ``reference``, ``relocatable``,
 ``sealed``, ``sizeof``, ``static``, ``supports``, ``switch``, ``typedef``, ``typeof``,
-``unchecked``.
+``var``.

@@ -104,6 +104,8 @@ The initial content of the VFS depends on how you invoke the compiler:
    The ``sources`` dictionary becomes the initial content of the virtual filesystem and its keys
    are used as source unit names.
 
+   .. _initial-vfs-content-standard-json-with-import-callback:
+
 #. **Standard JSON (via import callback)**
 
    With Standard JSON it is also possible to tell the compiler to use the import callback to obtain
@@ -178,7 +180,7 @@ Direct Imports
 
 An import that does not start with ``./`` or ``../`` is a *direct import*.
 
-::
+.. code-block:: solidity
 
     import "/project/lib/util.sol";         // source unit name: /project/lib/util.sol
     import "lib/util.sol";                  // source unit name: lib/util.sol
@@ -462,7 +464,8 @@ Here are the detailed rules governing the behaviour of remappings:
 
 #. **Prefix cannot be empty but context and target are optional.**
 
-   If ``target`` is omitted, it defaults to the value of the ``prefix``.
+   - If ``target`` is the empty string, ``prefix`` is simply removed from import paths.
+   - Empty ``context`` means that the remapping applies to all imports in all source units.
 
 .. index:: Remix IDE, file://
 

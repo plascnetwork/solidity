@@ -924,7 +924,7 @@ BOOST_AUTO_TEST_CASE(linking_yul)
 		},
 		"sources": {
 			"fileA": {
-				"content": "object \"a\" { code { let addr := linkersymbol(\"fileB:L\") } }"
+				"content": "object \"a\" { code { let addr := linkersymbol(\"fileB:L\") sstore(0, addr) } }"
 			}
 		}
 	}
@@ -956,7 +956,7 @@ BOOST_AUTO_TEST_CASE(linking_yul_empty_link_reference)
 		},
 		"sources": {
 			"fileA": {
-				"content": "object \"a\" { code { let addr := linkersymbol(\"\") } }"
+				"content": "object \"a\" { code { let addr := linkersymbol(\"\") sstore(0, addr) } }"
 			}
 		}
 	}
@@ -988,7 +988,7 @@ BOOST_AUTO_TEST_CASE(linking_yul_no_filename_in_link_reference)
 		},
 		"sources": {
 			"fileA": {
-				"content": "object \"a\" { code { let addr := linkersymbol(\"L\") } }"
+				"content": "object \"a\" { code { let addr := linkersymbol(\"L\") sstore(0, addr) } }"
 			}
 		}
 	}
@@ -1020,7 +1020,7 @@ BOOST_AUTO_TEST_CASE(linking_yul_same_library_name_different_files)
 		},
 		"sources": {
 			"fileA": {
-				"content": "object \"a\" { code { let addr := linkersymbol(\"fileC:L\") } }"
+				"content": "object \"a\" { code { let addr := linkersymbol(\"fileC:L\") sstore(0, addr) } }"
 			}
 		}
 	}
@@ -1067,9 +1067,11 @@ BOOST_AUTO_TEST_CASE(evm_version)
 	BOOST_CHECK(result["contracts"]["fileA"]["A"]["metadata"].asString().find("\"evmVersion\":\"istanbul\"") != string::npos);
 	result = compile(inputForVersion("\"evmVersion\": \"berlin\","));
 	BOOST_CHECK(result["contracts"]["fileA"]["A"]["metadata"].asString().find("\"evmVersion\":\"berlin\"") != string::npos);
+	result = compile(inputForVersion("\"evmVersion\": \"london\","));
+	BOOST_CHECK(result["contracts"]["fileA"]["A"]["metadata"].asString().find("\"evmVersion\":\"london\"") != string::npos);
 	// test default
 	result = compile(inputForVersion(""));
-	BOOST_CHECK(result["contracts"]["fileA"]["A"]["metadata"].asString().find("\"evmVersion\":\"berlin\"") != string::npos);
+	BOOST_CHECK(result["contracts"]["fileA"]["A"]["metadata"].asString().find("\"evmVersion\":\"london\"") != string::npos);
 	// test invalid
 	result = compile(inputForVersion("\"evmVersion\": \"invalid\","));
 	BOOST_CHECK(result["errors"][0]["message"].asString() == "Invalid EVM version requested.");

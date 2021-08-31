@@ -105,7 +105,7 @@ public:
 	bool visit(Continue const& _continueStatement) override;
 	bool visit(Break const& _breakStatement) override;
 	void endVisit(Return const& _return) override;
-	void endVisit(UnaryOperation const& _unaryOperation) override;
+	bool visit(UnaryOperation const& _unaryOperation) override;
 	bool visit(BinaryOperation const& _binOp) override;
 	void endVisit(FunctionCall const& _funCall) override;
 	void endVisit(FunctionCallOptions const& _funCallOptions) override;
@@ -151,6 +151,14 @@ private:
 	void appendBareCall(
 		FunctionCall const& _functionCall,
 		std::vector<ASTPointer<Expression const>> const& _arguments
+	);
+
+	/// Requests and assigns the internal ID of the referenced function to the referencing
+	/// expression and adds the function to the internal dispatch.
+	/// If the function is called right away, it does nothing.
+	void assignInternalFunctionIDIfNotCalledDirectly(
+		Expression const& _expression,
+		FunctionDefinition const& _referencedFunction
 	);
 
 	/// Generates the required conversion code and @returns an IRVariable referring to the value of @a _variable

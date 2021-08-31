@@ -191,11 +191,15 @@ def examine_id_coverage(top_dir, source_id_to_file_names, new_ids_only=False):
 
     # white list of ids which are not covered by tests
     white_ids = {
+        "9804", # Tested in test/libyul/ObjectParser.cpp.
+        "2674",
+        "6367",
         "3805", # "This is a pre-release compiler version, please do not use it in production."
                 # The warning may or may not exist in a compiler build.
         "4591", # "There are more than 256 warnings. Ignoring the rest."
                 # Due to 3805, the warning lists look different for different compiler builds.
-        "1834"  # Unimplemented feature error, as we do not test it anymore via cmdLineTests
+        "1834", # Unimplemented feature error, as we do not test it anymore via cmdLineTests
+        "5430"  # basefee being used in inline assembly for EVMVersion < london
     }
     assert len(test_ids & white_ids) == 0, "The sets are not supposed to intersect"
     test_ids |= white_ids
@@ -224,7 +228,8 @@ def examine_id_coverage(top_dir, source_id_to_file_names, new_ids_only=False):
         "1988", "2066", "3356",
         "3893", "3996", "4010", "4802",
         "5272", "5622", "7128", "7400",
-        "7589", "7593", "8065", "8084", "8140",
+        "7589", "7593", "7649", "7710",
+        "8065", "8084", "8140",
         "8312", "8592", "9134", "9609",
     }
 

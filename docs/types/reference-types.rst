@@ -27,19 +27,23 @@ Every reference type has an additional
 annotation, the "data location", about where it is stored. There are three data locations:
 ``memory``, ``storage`` and ``calldata``. Calldata is a non-modifiable,
 non-persistent area where function arguments are stored, and behaves mostly like memory.
-It is required for parameters of external functions but can also be used for other variables.
-
-
-.. note::
-    Prior to version 0.5.0 the data location could be omitted, and would default to different locations
-    depending on the kind of variable, function type, etc., but all complex types must now give an explicit
-    data location.
 
 .. note::
     If you can, try to use ``calldata`` as data location because it will avoid copies and
     also makes sure that the data cannot be modified. Arrays and structs with ``calldata``
     data location can also be returned from functions, but it is not possible to
     allocate such types.
+
+.. note::
+    Prior to version 0.6.9 data location for reference-type arguments was limited to
+    ``calldata`` in external functions, ``memory`` in public functions and either
+    ``memory`` or ``storage`` in internal and private ones.
+    Now ``memory`` and ``calldata`` are allowed in all functions regardless of their visibility.
+
+.. note::
+    Prior to version 0.5.0 the data location could be omitted, and would default to different locations
+    depending on the kind of variable, function type, etc., but all complex types must now give an explicit
+    data location.
 
 .. _data-location-assignment:
 
@@ -60,7 +64,7 @@ Data locations are not only relevant for persistency of data, but also for the s
   variables of storage struct type, even if the local variable
   itself is just a reference.
 
-::
+.. code-block:: solidity
 
     // SPDX-License-Identifier: GPL-3.0
     pragma solidity >=0.5.0 <0.9.0;
@@ -139,7 +143,7 @@ a reference to it.
 ``bytes`` and ``string`` as Arrays
 ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
 
-Variables of type ``bytes`` and ``string`` are special arrays. A ``bytes`` is similar to ``byte[]``,
+Variables of type ``bytes`` and ``string`` are special arrays. The ``bytes`` type is similar to ``bytes1[]``,
 but it is packed tightly in calldata and memory. ``string`` is equal to ``bytes`` but does not allow
 length or index access.
 
@@ -148,8 +152,8 @@ third-party string libraries. You can also compare two strings by their keccak25
 ``keccak256(abi.encodePacked(s1)) == keccak256(abi.encodePacked(s2))`` and
 concatenate two strings using ``bytes.concat(bytes(s1), bytes(s2))``.
 
-You should use ``bytes`` over ``byte[]`` because it is cheaper,
-since ``byte[]`` adds 31 padding bytes between the elements. As a general rule,
+You should use ``bytes`` over ``bytes1[]`` because it is cheaper,
+since ``bytes1[]`` adds 31 padding bytes between the elements. As a general rule,
 use ``bytes`` for arbitrary-length raw byte data and ``string`` for arbitrary-length
 string (UTF-8) data. If you can limit the length to a certain number of bytes,
 always use one of the value types ``bytes1`` to ``bytes32`` because they are much cheaper.
@@ -171,7 +175,7 @@ You can concatenate a variable number of ``bytes`` or ``bytes1 ... bytes32`` usi
 The function returns a single ``bytes memory`` array that contains the contents of the arguments without padding.
 If you want to use string parameters or other types, you need to convert them to ``bytes`` or ``bytes1``/.../``bytes32`` first.
 
-::
+.. code-block:: solidity
 
     // SPDX-License-Identifier: GPL-3.0
     pragma solidity ^0.8.4;
@@ -200,7 +204,7 @@ or create a new memory array and copy every element.
 As all variables in Solidity, the elements of newly allocated arrays are always initialized
 with the :ref:`default value<default-value>`.
 
-::
+.. code-block:: solidity
 
     // SPDX-License-Identifier: GPL-3.0
     pragma solidity >=0.4.16 <0.9.0;
@@ -239,7 +243,7 @@ In the example below, the type of ``[1, 2, 3]`` is
 you want the result to be a ``uint[3] memory`` type, you need to convert
 the first element to ``uint``.
 
-::
+.. code-block:: solidity
 
     // SPDX-License-Identifier: GPL-3.0
     pragma solidity >=0.4.16 <0.9.0;
@@ -261,7 +265,7 @@ Since fixed-size memory arrays of different type cannot be converted into each o
 (even if the base types can), you always have to specify a common base type explicitly
 if you want to use two-dimensional array literals:
 
-::
+.. code-block:: solidity
 
     // SPDX-License-Identifier: GPL-3.0
     pragma solidity >=0.4.16 <0.9.0;
@@ -278,7 +282,7 @@ if you want to use two-dimensional array literals:
 Fixed size memory arrays cannot be assigned to dynamically-sized
 memory arrays, i.e. the following is not possible:
 
-::
+.. code-block:: solidity
 
     // SPDX-License-Identifier: GPL-3.0
     pragma solidity >=0.4.0 <0.9.0;
@@ -298,7 +302,7 @@ complications because of how arrays are passed in the ABI.
 If you want to initialize dynamically-sized arrays, you have to assign the
 individual elements:
 
-::
+.. code-block:: solidity
 
     // SPDX-License-Identifier: GPL-3.0
     pragma solidity >=0.4.16 <0.9.0;
@@ -356,7 +360,7 @@ Array Members
     that return dynamic arrays, make sure to use an EVM that is set to
     Byzantium mode.
 
-::
+.. code-block:: solidity
 
     // SPDX-License-Identifier: GPL-3.0
     pragma solidity >=0.6.0 <0.9.0;
@@ -489,10 +493,10 @@ they only exist in intermediate expressions.
 
 Array slices are useful to ABI-decode secondary data passed in function parameters:
 
-::
+.. code-block:: solidity
 
     // SPDX-License-Identifier: GPL-3.0
-    pragma solidity >0.8.4 <0.9.0;
+    pragma solidity >=0.8.5 <0.9.0;
     contract Proxy {
         /// @dev Address of the client contract managed by proxy i.e., this contract
         address client;
@@ -528,7 +532,7 @@ Structs
 Solidity provides a way to define new types in the form of structs, which is
 shown in the following example:
 
-::
+.. code-block:: solidity
 
     // SPDX-License-Identifier: GPL-3.0
     pragma solidity >=0.6.0 <0.9.0;
@@ -559,7 +563,7 @@ shown in the following example:
         function newCampaign(address payable beneficiary, uint goal) public returns (uint campaignID) {
             campaignID = numCampaigns++; // campaignID is return variable
             // We cannot use "campaigns[campaignID] = Campaign(beneficiary, goal, 0, 0)"
-            // because the RHS creates a memory-struct "Campaign" that contains a mapping.
+            // because the right hand side creates a memory-struct "Campaign" that contains a mapping.
             Campaign storage c = campaigns[campaignID];
             c.beneficiary = beneficiary;
             c.fundingGoal = goal;

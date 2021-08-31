@@ -50,7 +50,7 @@ The following example illustrates how to use libraries (but using a manual metho
 be sure to check out :ref:`using for <using-for>` for a
 more advanced example to implement a set).
 
-::
+.. code-block:: solidity
 
     // SPDX-License-Identifier: GPL-3.0
     pragma solidity >=0.6.0 <0.9.0;
@@ -129,10 +129,11 @@ The following example shows how to use :ref:`types stored in memory <data-locati
 internal functions in libraries in order to implement
 custom types without the overhead of external function calls:
 
-::
+.. code-block:: solidity
+    :force:
 
     // SPDX-License-Identifier: GPL-3.0
-    pragma solidity >=0.6.8 <0.9.0;
+    pragma solidity ^0.8.0;
 
     struct bigint {
         uint[] limbs;
@@ -150,11 +151,14 @@ custom types without the overhead of external function calls:
             for (uint i = 0; i < r.limbs.length; ++i) {
                 uint a = limb(_a, i);
                 uint b = limb(_b, i);
-                r.limbs[i] = a + b + carry;
-                if (a + b < a || (a + b == type(uint).max && carry > 0))
-                    carry = 1;
-                else
-                    carry = 0;
+                unchecked {
+                    r.limbs[i] = a + b + carry;
+
+                    if (a + b < a || (a + b == type(uint).max && carry > 0))
+                        carry = 1;
+                    else
+                        carry = 0;
+                }
             }
             if (carry > 0) {
                 // too bad, we have to add a limb
@@ -223,14 +227,14 @@ following an internal naming schema and arguments of types not supported in the 
 
 The following identifiers are used for the types in the signatures:
 
- - Value types, non-storage ``string`` and non-storage ``bytes`` use the same identifiers as in the contract ABI.
- - Non-storage array types follow the same convention as in the contract ABI, i.e. ``<type>[]`` for dynamic arrays and
-   ``<type>[M]`` for fixed-size arrays of ``M`` elements.
- - Non-storage structs are referred to by their fully qualified name, i.e. ``C.S`` for ``contract C { struct S { ... } }``.
- - Storage pointer mappings use ``mapping(<keyType> => <valueType>) storage`` where ``<keyType>`` and ``<valueType>`` are
-   the identifiers for the key and value types of the mapping, respectively.
- - Other storage pointer types use the type identifier of their corresponding non-storage type, but append a single space
-   followed by ``storage`` to it.
+- Value types, non-storage ``string`` and non-storage ``bytes`` use the same identifiers as in the contract ABI.
+- Non-storage array types follow the same convention as in the contract ABI, i.e. ``<type>[]`` for dynamic arrays and
+  ``<type>[M]`` for fixed-size arrays of ``M`` elements.
+- Non-storage structs are referred to by their fully qualified name, i.e. ``C.S`` for ``contract C { struct S { ... } }``.
+- Storage pointer mappings use ``mapping(<keyType> => <valueType>) storage`` where ``<keyType>`` and ``<valueType>`` are
+  the identifiers for the key and value types of the mapping, respectively.
+- Other storage pointer types use the type identifier of their corresponding non-storage type, but append a single space
+  followed by ``storage`` to it.
 
 The argument encoding is the same as for the regular contract ABI, except for storage pointers, which are encoded as a
 ``uint256`` value referring to the storage slot to which they point.
@@ -238,7 +242,7 @@ The argument encoding is the same as for the regular contract ABI, except for st
 Similarly to the contract ABI, the selector consists of the first four bytes of the Keccak256-hash of the signature.
 Its value can be obtained from Solidity using the ``.selector`` member as follows:
 
-::
+.. code-block:: solidity
 
     // SPDX-License-Identifier: GPL-3.0
     pragma solidity >=0.5.14 <0.9.0;

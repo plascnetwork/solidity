@@ -44,16 +44,15 @@ EVMCodeTransformTest::EVMCodeTransformTest(string const& _filename):
 
 TestCase::TestResult EVMCodeTransformTest::run(ostream& _stream, string const& _linePrefix, bool const _formatted)
 {
-	solidity::frontend::OptimiserSettings settings = solidity::frontend::OptimiserSettings::full();
+	solidity::frontend::OptimiserSettings settings = solidity::frontend::OptimiserSettings::none();
 	settings.runYulOptimiser = false;
 	settings.optimizeStackAllocation = m_stackOpt;
 	AssemblyStack stack(EVMVersion{}, AssemblyStack::Language::StrictAssembly, settings);
 	if (!stack.parseAndAnalyze("", m_source))
 	{
 		AnsiColorized(_stream, _formatted, {formatting::BOLD, formatting::RED}) << _linePrefix << "Error parsing source." << endl;
-		SourceReferenceFormatter formatter(_stream, true, false);
-		for (auto const& error: stack.errors())
-			formatter.printErrorInformation(*error);
+		SourceReferenceFormatter{_stream, stack, true, false}
+			.printErrorInformation(stack.errors());
 		return TestResult::FatalError;
 	}
 

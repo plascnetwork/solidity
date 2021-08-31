@@ -128,10 +128,10 @@ The modulo operation ``a % n`` yields the remainder ``r`` after the division of 
 by the operand ``n``, where ``q = int(a / n)`` and ``r = a - (n * q)``. This means that modulo
 results in the same sign as its left operand (or zero) and ``a % n == -(-a % n)`` holds for negative ``a``:
 
- * ``int256(5) % int256(2) == int256(1)``
- * ``int256(5) % int256(-2) == int256(1)``
- * ``int256(-5) % int256(2) == int256(-1)``
- * ``int256(-5) % int256(-2) == int256(-1)``
+* ``int256(5) % int256(2) == int256(1)``
+* ``int256(5) % int256(-2) == int256(1)``
+* ``int256(-5) % int256(2) == int256(-1)``
+* ``int256(-5) % int256(-2) == int256(-1)``
 
 .. note::
   Modulo with zero causes a :ref:`Panic error<assert-and-require>`. This check can **not** be disabled through ``unchecked { ... }``.
@@ -184,8 +184,8 @@ Address
 
 The address type comes in two flavours, which are largely identical:
 
- - ``address``: Holds a 20 byte value (size of an Ethereum address).
- - ``address payable``: Same as ``address``, but with the additional members ``transfer`` and ``send``.
+- ``address``: Holds a 20 byte value (size of an Ethereum address).
+- ``address payable``: Same as ``address``, but with the additional members ``transfer`` and ``send``.
 
 The idea behind this distinction is that ``address payable`` is an address you can send Ether to,
 while a plain ``address`` cannot be sent Ether.
@@ -238,7 +238,8 @@ For a quick reference of all members of address, see :ref:`address_related`.
 It is possible to query the balance of an address using the property ``balance``
 and to send Ether (in units of wei) to a payable address using the ``transfer`` function:
 
-::
+.. code-block:: solidity
+    :force:
 
     address payable x = address(0x123);
     address myAddress = address(this);
@@ -272,7 +273,9 @@ return the success condition (as a ``bool``) and the returned data
 The functions ``abi.encode``, ``abi.encodePacked``, ``abi.encodeWithSelector``
 and ``abi.encodeWithSignature`` can be used to encode structured data.
 
-Example::
+Example:
+
+.. code-block:: solidity
 
     bytes memory payload = abi.encodeWithSignature("register(string)", "MyName");
     (bool success, bytes memory returnData) = address(nameReg).call(payload);
@@ -291,15 +294,21 @@ Example::
     arbitrary arguments and would also handle a first argument of type
     ``bytes4`` differently. These edge cases were removed in version 0.5.0.
 
-It is possible to adjust the supplied gas with the ``gas`` modifier::
+It is possible to adjust the supplied gas with the ``gas`` modifier:
+
+.. code-block:: solidity
 
     address(nameReg).call{gas: 1000000}(abi.encodeWithSignature("register(string)", "MyName"));
 
-Similarly, the supplied Ether value can be controlled too::
+Similarly, the supplied Ether value can be controlled too:
+
+.. code-block:: solidity
 
     address(nameReg).call{value: 1 ether}(abi.encodeWithSignature("register(string)", "MyName"));
 
-Lastly, these modifiers can be combined. Their order does not matter::
+Lastly, these modifiers can be combined. Their order does not matter:
+
+.. code-block:: solidity
 
     address(nameReg).call{gas: 1000000, value: 1 ether}(abi.encodeWithSignature("register(string)", "MyName"));
 
@@ -390,7 +399,7 @@ Members:
 * ``.length`` yields the fixed length of the byte array (read-only).
 
 .. note::
-    The type ``byte[]`` is an array of bytes, but due to padding rules, it wastes
+    The type ``bytes1[]`` is an array of bytes, but due to padding rules, it wastes
     31 bytes of space for each element (except in storage). It is better to use the ``bytes``
     type instead.
 
@@ -483,7 +492,7 @@ regardless of the type of the right (exponent) operand.
     for the type of ``2.5`` and ``uint128``, the Solidity compiler does not accept
     this code.
 
-::
+.. code-block:: solidity
 
     uint128 a = 1;
     uint128 b = 2.5 + a + 0.5;
@@ -502,27 +511,32 @@ String literals can only contain printable ASCII characters, which means the cha
 
 Additionally, string literals also support the following escape characters:
 
- - ``\<newline>`` (escapes an actual newline)
- - ``\\`` (backslash)
- - ``\'`` (single quote)
- - ``\"`` (double quote)
- - ``\b`` (backspace)
- - ``\f`` (form feed)
- - ``\n`` (newline)
- - ``\r`` (carriage return)
- - ``\t`` (tab)
- - ``\v`` (vertical tab)
- - ``\xNN`` (hex escape, see below)
- - ``\uNNNN`` (unicode escape, see below)
+- ``\<newline>`` (escapes an actual newline)
+- ``\\`` (backslash)
+- ``\'`` (single quote)
+- ``\"`` (double quote)
+- ``\n`` (newline)
+- ``\r`` (carriage return)
+- ``\t`` (tab)
+- ``\xNN`` (hex escape, see below)
+- ``\uNNNN`` (unicode escape, see below)
 
 ``\xNN`` takes a hex value and inserts the appropriate byte, while ``\uNNNN`` takes a Unicode codepoint and inserts an UTF-8 sequence.
+
+.. note::
+
+    Until version 0.8.0 there were three additional escape sequences: ``\b``, ``\f`` and ``\v``.
+    They are commonly available in other languages but rarely needed in practice.
+    If you do need them, they can still be inserted via hexadecimal escapes, i.e. ``\x08``, ``\x0c``
+    and ``\x0b``, respectively, just as any other ASCII character.
 
 The string in the following example has a length of ten bytes.
 It starts with a newline byte, followed by a double quote, a single
 quote a backslash character and then (without separator) the
 character sequence ``abcdef``.
 
-::
+.. code-block:: solidity
+    :force:
 
     "\n\"\'\\abc\
     def"
@@ -536,7 +550,7 @@ Unicode Literals
 While regular string literals can only contain ASCII, Unicode literals – prefixed with the keyword ``unicode`` – can contain any valid UTF-8 sequence.
 They also support the very same escape sequences as regular string literals.
 
-::
+.. code-block:: solidity
 
     string memory a = unicode"Hello 😃";
 
@@ -574,7 +588,7 @@ The data representation is the same as for enums in C: The options are represent
 subsequent unsigned integer values starting from ``0``.
 
 
-::
+.. code-block:: solidity
 
     // SPDX-License-Identifier: GPL-3.0
     pragma solidity >=0.4.16 <0.9.0;
@@ -626,7 +640,10 @@ contract internally.
 External functions consist of an address and a function signature and they can
 be passed via and returned from external function calls.
 
-Function types are notated as follows::
+Function types are notated as follows:
+
+.. code-block:: solidity
+    :force:
 
     function (<parameter types>) {internal|external} [pure|view|payable] [returns (<return types>)]
 
@@ -646,9 +663,9 @@ their parameter types are identical, their return types are identical,
 their internal/external property is identical and the state mutability of ``A``
 is more restrictive than the state mutability of ``B``. In particular:
 
- - ``pure`` functions can be converted to ``view`` and ``non-payable`` functions
- - ``view`` functions can be converted to ``non-payable`` functions
- - ``payable`` functions can be converted to ``non-payable`` functions
+- ``pure`` functions can be converted to ``view`` and ``non-payable`` functions
+- ``view`` functions can be converted to ``non-payable`` functions
+- ``payable`` functions can be converted to ``non-payable`` functions
 
 No other conversions between function types are possible.
 
@@ -695,7 +712,9 @@ External (or public) functions have the following members:
   respectively. See :ref:`External Function Calls <external-function-calls>` for
   more information.
 
-Example that shows how to use the members::
+Example that shows how to use the members:
+
+.. code-block:: solidity
 
     // SPDX-License-Identifier: GPL-3.0
     pragma solidity >=0.6.4 <0.9.0;
@@ -711,7 +730,9 @@ Example that shows how to use the members::
         }
     }
 
-Example that shows how to use internal function types::
+Example that shows how to use internal function types:
+
+.. code-block:: solidity
 
     // SPDX-License-Identifier: GPL-3.0
     pragma solidity >=0.4.16 <0.9.0;
@@ -769,7 +790,9 @@ Example that shows how to use internal function types::
         }
     }
 
-Another example that uses external function types::
+Another example that uses external function types:
+
+.. code-block:: solidity
 
     // SPDX-License-Identifier: GPL-3.0
     pragma solidity >=0.4.22 <0.9.0;

@@ -1174,11 +1174,12 @@ bool ExpressionCompiler::visit(FunctionCall const& _functionCall)
 					targetTypes.emplace_back(argument->annotation().type);
 				else if (
 					auto const* literalType = dynamic_cast<StringLiteralType const*>(argument->annotation().type);
-					literalType && literalType->value().size() <= 32
+					literalType && !literalType->value().empty() && literalType->value().size() <= 32
 				)
 					targetTypes.emplace_back(TypeProvider::fixedBytes(static_cast<unsigned>(literalType->value().size())));
 				else
 				{
+					solAssert(!dynamic_cast<RationalNumberType const*>(argument->annotation().type), "");
 					solAssert(argument->annotation().type->isImplicitlyConvertibleTo(*TypeProvider::bytesMemory()), "");
 					targetTypes.emplace_back(TypeProvider::bytesMemory());
 				}
@@ -1920,6 +1921,8 @@ bool ExpressionCompiler::visit(MemberAccess const& _memberAccess)
 			m_context << Instruction::GASPRICE;
 		else if (member == "chainid")
 			m_context << Instruction::CHAINID;
+		else if (member == "basefee")
+			m_context << Instruction::BASEFEE;
 		else if (member == "data")
 			m_context << u256(0) << Instruction::CALLDATASIZE;
 		else if (member == "sig")

@@ -372,6 +372,7 @@ bool SemanticInformation::invalidInPureFunctions(Instruction _instruction)
 	case Instruction::CALLER:
 	case Instruction::CALLVALUE:
 	case Instruction::CHAINID:
+	case Instruction::BASEFEE:
 	case Instruction::CALLTOKENVALUE:
 	case Instruction::CALLTOKENID:
 	case Instruction::GAS:

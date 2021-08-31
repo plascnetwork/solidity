@@ -53,12 +53,6 @@ namespace po = boost::program_options;
 namespace
 {
 
-void printErrors(ErrorList const& _errors)
-{
-	for (auto const& error: _errors)
-		SourceReferenceFormatter(cout, true, false).printErrorInformation(*error);
-}
-
 pair<shared_ptr<Block>, shared_ptr<AsmAnalysisInfo>> parse(string const& _source)
 {
 	AssemblyStack stack(
@@ -73,7 +67,7 @@ pair<shared_ptr<Block>, shared_ptr<AsmAnalysisInfo>> parse(string const& _source
 	}
 	else
 	{
-		printErrors(stack.errors());
+		SourceReferenceFormatter(cout, stack, true, false).printErrorInformation(stack.errors());
 		return {};
 	}
 }
@@ -148,9 +142,14 @@ Allowed options)",
 					cerr << "File not found: " << path << endl;
 					return 1;
 				}
+				catch (NotAFile const&)
+				{
+					cerr << "Not a regular file: " << path << endl;
+					return 1;
+				}
 			}
 		else
-			input = readStandardInput();
+			input = readUntilEnd(cin);
 
 		interpret(input);
 	}

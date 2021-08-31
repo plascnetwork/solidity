@@ -639,6 +639,15 @@ void TypeChecker::visitManually(
 						"Can only use modifiers defined in the current contract or in base contracts."
 					);
 			}
+		if (
+			*_modifier.name().annotation().requiredLookup == VirtualLookup::Static &&
+			!modifierDecl->isImplemented()
+		)
+			m_errorReporter.typeError(
+				1835_error,
+				_modifier.location(),
+				"Cannot call unimplemented modifier. The modifier has no implementation in the referenced contract. Refer to it by its unqualified name if you want to call the implementation from the most derived contract."
+			);
 	}
 	else
 		// check parameters for Base constructors
@@ -2024,11 +2033,14 @@ void TypeChecker::typeCheckBytesConcatFunction(
 	typeCheckFunctionGeneralChecks(_functionCall, _functionType);
 
 	for (shared_ptr<Expression const> const& argument: _functionCall.arguments())
-		if (
-			Type const* argumentType = type(*argument);
+	{
+		Type const* argumentType = type(*argument);
+		bool notConvertibleToBytes =
 			!argumentType->isImplicitlyConvertibleTo(*TypeProvider::fixedBytes(32)) &&
-			!argumentType->isImplicitlyConvertibleTo(*TypeProvider::bytesMemory())
-		)
+			!argumentType->isImplicitlyConvertibleTo(*TypeProvider::bytesMemory());
+		bool numberLiteral = (dynamic_cast<RationalNumberType const*>(argumentType) != nullptr);
+
+		if (notConvertibleToBytes || numberLiteral)
 			m_errorReporter.typeError(
 				8015_error,
 				argument->location(),
@@ -2036,6 +2048,7 @@ void TypeChecker::typeCheckBytesConcatFunction(
 				"bytes or fixed bytes type is required, but " +
 				argumentType->toString(true) + " provided."
 			);
+	}
 }
 
 void TypeChecker::typeCheckFunctionGeneralChecks(
@@ -2934,6 +2947,12 @@ bool TypeChecker::visit(MemberAccess const& _memberAccess)
 				3081_error,
 				_memberAccess.location(),
 				"\"chainid\" is not supported by the VM version."
+			);
+		else if (magicType->kind() == MagicType::Kind::Block && memberName == "basefee" && !m_evmVersion.hasBaseFee())
+			m_errorReporter.typeError(
+				5921_error,
+				_memberAccess.location(),
+				"\"basefee\" is not supported by the VM version."
 			);
 	}
 

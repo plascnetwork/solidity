@@ -61,7 +61,7 @@ CodeTransform::CodeTransform(
 	bool _allowStackOpt,
 	EVMDialect const& _dialect,
 	BuiltinContext& _builtinContext,
-	ExternalIdentifierAccess _identifierAccess,
+	ExternalIdentifierAccess::CodeGenerator _identifierAccessCodeGen,
 	bool _useNamedLabelsForFunctions,
 	shared_ptr<Context> _context,
 	vector<TypedName> _delayedReturnVariables,
@@ -73,7 +73,7 @@ CodeTransform::CodeTransform(
 	m_builtinContext(_builtinContext),
 	m_allowStackOpt(_allowStackOpt),
 	m_useNamedLabelsForFunctions(_useNamedLabelsForFunctions),
-	m_identifierAccess(move(_identifierAccess)),
+	m_identifierAccessCodeGen(move(_identifierAccessCodeGen)),
 	m_context(move(_context)),
 	m_delayedReturnVariables(move(_delayedReturnVariables)),
 	m_functionExitLabel(_functionExitLabel)
@@ -182,16 +182,24 @@ void CodeTransform::operator()(VariableDeclaration const& _varDecl)
 			else
 				m_variablesScheduledForDeletion.insert(&var);
 		}
-		else if (m_unusedStackSlots.empty())
-			atTopOfStack = false;
 		else
 		{
-			auto slot = static_cast<size_t>(*m_unusedStackSlots.begin());
-			m_unusedStackSlots.erase(m_unusedStackSlots.begin());
-			m_context->variableStackHeights[&var] = slot;
-			if (size_t heightDiff = variableHeightDiff(var, varName, true))
-				m_assembly.appendInstruction(evmasm::swapInstruction(static_cast<unsigned>(heightDiff - 1)));
-			m_assembly.appendInstruction(evmasm::Instruction::POP);
+			bool foundUnusedSlot = false;
+			for (auto it = m_unusedStackSlots.begin(); it != m_unusedStackSlots.end(); ++it)
+			{
+				if (m_assembly.stackHeight() - *it > 17)
+					continue;
+				foundUnusedSlot = true;
+				auto slot = static_cast<size_t>(*it);
+				m_unusedStackSlots.erase(it);
+				m_context->variableStackHeights[&var] = slot;
+				if (size_t heightDiff = variableHeightDiff(var, varName, true))
+					m_assembly.appendInstruction(evmasm::swapInstruction(static_cast<unsigned>(heightDiff - 1)));
+				m_assembly.appendInstruction(evmasm::Instruction::POP);
+				break;
+			}
+			if (!foundUnusedSlot)
+				atTopOfStack = false;
 		}
 	}
 }
@@ -229,16 +237,14 @@ void CodeTransform::operator()(FunctionCall const& _call)
 {
 	yulAssert(m_scope, "");
 
+	m_assembly.setSourceLocation(extractSourceLocationFromDebugData(_call.debugData));
 	if (BuiltinFunctionForEVM const* builtin = m_dialect.builtin(_call.functionName.name))
 		builtin->generateCode(_call, m_assembly, m_builtinContext, [&](Expression const& _expression) {
 			visitExpression(_expression);
 		});
 	else
 	{
-		m_assembly.setSourceLocation(extractSourceLocationFromDebugData(_call.debugData));
-		AbstractAssembly::LabelID returnLabel(numeric_limits<AbstractAssembly::LabelID>::max()); // only used for evm 1.0
-
-		returnLabel = m_assembly.newLabelId();
+		AbstractAssembly::LabelID returnLabel = m_assembly.newLabelId();
 		m_assembly.appendLabelReference(returnLabel);
 
 		Scope::Function* function = nullptr;
@@ -286,10 +292,10 @@ void CodeTransform::operator()(Identifier const& _identifier)
 		return;
 	}
 	yulAssert(
-		m_identifierAccess.generateCode,
+		m_identifierAccessCodeGen,
 		"Identifier not found and no external access available."
 	);
-	m_identifierAccess.generateCode(_identifier, IdentifierContext::RValue, m_assembly);
+	m_identifierAccessCodeGen(_identifier, IdentifierContext::RValue, m_assembly);
 }
 
 void CodeTransform::operator()(Literal const& _literal)
@@ -312,8 +318,6 @@ void CodeTransform::operator()(If const& _if)
 
 void CodeTransform::operator()(Switch const& _switch)
 {
-	//@TODO use JUMPV in EVM1.5?
-
 	visitExpression(*_switch.expression);
 	int expressionHeight = m_assembly.stackHeight();
 	map<Case const*, AbstractAssembly::LabelID> caseBodies;
@@ -387,7 +391,7 @@ void CodeTransform::operator()(FunctionDefinition const& _function)
 		m_allowStackOpt,
 		m_dialect,
 		m_builtinContext,
-		m_identifierAccess,
+		m_identifierAccessCodeGen,
 		m_useNamedLabelsForFunctions,
 		m_context,
 		_function.returnVariables,
@@ -404,10 +408,12 @@ void CodeTransform::operator()(FunctionDefinition const& _function)
 				subTransform.deleteVariable(var);
 		}
 
-	if (!m_allowStackOpt || _function.returnVariables.empty())
+	if (!m_allowStackOpt)
 		subTransform.setupReturnVariablesAndFunctionExit();
 
 	subTransform(_function.body);
+
+	m_assembly.setSourceLocation(extractSourceLocationFromDebugData(_function.debugData));
 	if (!subTransform.m_stackErrors.empty())
 	{
 		m_assembly.markAsInvalid();
@@ -594,6 +600,7 @@ void CodeTransform::visitExpression(Expression const& _expression)
 
 void CodeTransform::setupReturnVariablesAndFunctionExit()
 {
+	yulAssert(isInsideFunction(), "");
 	yulAssert(!returnVariablesAndFunctionExitAreSetup(), "");
 	yulAssert(m_scope, "");
 
@@ -656,7 +663,8 @@ void CodeTransform::visitStatements(vector<Statement> const& _statements)
 	{
 		freeUnusedVariables();
 		if (
-			!m_delayedReturnVariables.empty() &&
+			isInsideFunction() &&
+			!returnVariablesAndFunctionExitAreSetup() &&
 			statementNeedsReturnVariableSetup(statement, m_delayedReturnVariables)
 		)
 			setupReturnVariablesAndFunctionExit();
@@ -732,10 +740,10 @@ void CodeTransform::generateAssignment(Identifier const& _variableName)
 	else
 	{
 		yulAssert(
-			m_identifierAccess.generateCode,
+			m_identifierAccessCodeGen,
 			"Identifier not found and no external access available."
 		);
-		m_identifierAccess.generateCode(_variableName, IdentifierContext::LValue, m_assembly);
+		m_identifierAccessCodeGen(_variableName, IdentifierContext::LValue, m_assembly);
 	}
 }
 

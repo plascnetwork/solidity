@@ -30,6 +30,8 @@
 #include <libsmtutil/SMTPortfolio.h>
 #include <libsmtutil/Helpers.h>
 
+#include <liblangutil/CharStreamProvider.h>
+
 #include <range/v3/view.hpp>
 
 #include <boost/range/adaptors.hpp>
@@ -45,11 +47,13 @@ using namespace solidity::frontend;
 
 SMTEncoder::SMTEncoder(
 	smt::EncodingContext& _context,
-	ModelCheckerSettings const& _settings
+	ModelCheckerSettings const& _settings,
+	langutil::CharStreamProvider const& _charStreamProvider
 ):
 	m_errorReporter(m_smtErrors),
 	m_context(_context),
-	m_settings(_settings)
+	m_settings(_settings),
+	m_charStreamProvider(_charStreamProvider)
 {
 }
 
@@ -1918,6 +1922,9 @@ pair<smtutil::Expression, smtutil::Expression> SMTEncoder::divModWithSlacks(
 	IntegerType const& _type
 )
 {
+	if (m_settings.divModNoSlacks)
+		return {_left / _right, _left % _right};
+
 	IntegerType const* intType = &_type;
 	string suffix = "div_mod_" + to_string(m_context.newUniqueId());
 	smt::SymbolicIntVariable dSymb(intType, intType, "d_" + suffix, m_context);
