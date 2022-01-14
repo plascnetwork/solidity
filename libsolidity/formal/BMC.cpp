@@ -37,15 +37,14 @@ using namespace solidity::frontend;
 
 BMC::BMC(
 	smt::EncodingContext& _context,
-	ErrorReporter& _errorReporter,
+	UniqueErrorReporter& _errorReporter,
 	map<h256, string> const& _smtlib2Responses,
 	ReadCallback::Callback const& _smtCallback,
 	ModelCheckerSettings const& _settings,
 	CharStreamProvider const& _charStreamProvider
 ):
-	SMTEncoder(_context, _settings, _charStreamProvider),
-	m_interface(make_unique<smtutil::SMTPortfolio>(_smtlib2Responses, _smtCallback, _settings.solvers, _settings.timeout)),
-	m_outerErrorReporter(_errorReporter)
+	SMTEncoder(_context, _settings, _errorReporter, _charStreamProvider),
+	m_interface(make_unique<smtutil::SMTPortfolio>(_smtlib2Responses, _smtCallback, _settings.solvers, _settings.timeout))
 {
 #if defined (HAVE_Z3) || defined (HAVE_CVC4)
 	if (m_settings.solvers.cvc4 || m_settings.solvers.z3)
@@ -67,7 +66,7 @@ void BMC::analyze(SourceUnit const& _source, map<ASTNode const*, set<Verificatio
 		if (!m_noSolverWarning)
 		{
 			m_noSolverWarning = true;
-			m_outerErrorReporter.warning(
+			m_errorReporter.warning(
 				7710_error,
 				SourceLocation(),
 				"BMC analysis was not possible since no SMT solver was found and enabled."
@@ -76,30 +75,30 @@ void BMC::analyze(SourceUnit const& _source, map<ASTNode const*, set<Verificatio
 		return;
 	}
 
-	if (SMTEncoder::analyze(_source))
-	{
-		m_solvedTargets = move(_solvedTargets);
-		m_context.setSolver(m_interface.get());
-		m_context.clear();
-		m_context.setAssertionAccumulation(true);
-		m_variableUsage.setFunctionInlining(shouldInlineFunctionCall);
-		createFreeConstants(sourceDependencies(_source));
-		m_unprovedAmt = 0;
+	SMTEncoder::resetSourceAnalysis();
 
-		_source.accept(*this);
+	m_solvedTargets = move(_solvedTargets);
+	m_context.setSolver(m_interface.get());
+	m_context.reset();
+	m_context.setAssertionAccumulation(true);
+	m_variableUsage.setFunctionInlining(shouldInlineFunctionCall);
+	createFreeConstants(sourceDependencies(_source));
+	state().prepareForSourceUnit(_source);
+	m_unprovedAmt = 0;
 
-		if (m_unprovedAmt > 0 && !m_settings.showUnproved)
-			m_errorReporter.warning(
-				2788_error,
-				{},
-				"BMC: " +
-				to_string(m_unprovedAmt) +
-				" verification condition(s) could not be proved." +
-				" Enable the model checker option \"show unproved\" to see all of them." +
-				" Consider choosing a specific contract to be verified in order to reduce the solving problems." +
-				" Consider increasing the timeout per query."
-			);
-	}
+	_source.accept(*this);
+
+	if (m_unprovedAmt > 0 && !m_settings.showUnproved)
+		m_errorReporter.warning(
+			2788_error,
+			{},
+			"BMC: " +
+			to_string(m_unprovedAmt) +
+			" verification condition(s) could not be proved." +
+			" Enable the model checker option \"show unproved\" to see all of them." +
+			" Consider choosing a specific contract to be verified in order to reduce the solving problems." +
+			" Consider increasing the timeout per query."
+		);
 
 	// If this check is true, Z3 and CVC4 are not available
 	// and the query answers were not provided, since SMTPortfolio
@@ -113,7 +112,7 @@ void BMC::analyze(SourceUnit const& _source, map<ASTNode const*, set<Verificatio
 		if (!m_noSolverWarning)
 		{
 			m_noSolverWarning = true;
-			m_outerErrorReporter.warning(
+			m_errorReporter.warning(
 				8084_error,
 				SourceLocation(),
 				"BMC analysis was not possible. No SMT solver (Z3 or CVC4) was available."
@@ -124,10 +123,6 @@ void BMC::analyze(SourceUnit const& _source, map<ASTNode const*, set<Verificatio
 			);
 		}
 	}
-	else
-		m_outerErrorReporter.append(m_errorReporter.errors());
-
-	m_errorReporter.clear();
 }
 
 bool BMC::shouldInlineFunctionCall(
@@ -193,7 +188,8 @@ bool BMC::visit(FunctionDefinition const& _function)
 	{
 		reset();
 		initFunction(_function);
-		m_context.addAssertion(state().txTypeConstraints() && state().txFunctionConstraints(_function));
+		if (_function.isConstructor() || _function.isPublic())
+			m_context.addAssertion(state().txTypeConstraints() && state().txFunctionConstraints(_function));
 		resetStateVariables();
 	}
 
@@ -487,6 +483,8 @@ void BMC::endVisit(FunctionCall const& _funCall)
 	case FunctionType::Kind::BlockHash:
 	case FunctionType::Kind::AddMod:
 	case FunctionType::Kind::MulMod:
+	case FunctionType::Kind::Unwrap:
+	case FunctionType::Kind::Wrap:
 		[[fallthrough]];
 	default:
 		SMTEncoder::endVisit(_funCall);
@@ -587,10 +585,16 @@ void BMC::internalOrExternalFunctionCall(FunctionCall const& _funCall)
 			_funCall.location(),
 			"BMC does not yet implement this type of function call."
 		);
+	else if (funType.kind() == FunctionType::Kind::BareStaticCall)
+	{
+		// Do nothing here.
+		// Neither storage nor balances should be modified.
+	}
 	else
 	{
 		m_externalFunctionCallHappened = true;
 		resetStorageVariables();
+		resetBalances();
 	}
 }
 

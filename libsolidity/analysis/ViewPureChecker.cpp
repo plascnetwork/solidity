@@ -69,7 +69,7 @@ public:
 		if (yul::EVMDialect const* dialect = dynamic_cast<decltype(dialect)>(&m_dialect))
 			if (yul::BuiltinFunctionForEVM const* fun = dialect->builtin(_funCall.functionName.name))
 				if (fun->instruction)
-					checkInstruction(_funCall.debugData->location, *fun->instruction);
+					checkInstruction(nativeLocationOf(_funCall), *fun->instruction);
 
 		for (auto const& arg: _funCall.arguments)
 			std::visit(*this, arg);
@@ -369,6 +369,7 @@ void ViewPureChecker::endVisit(MemberAccess const& _memberAccess)
 			{MagicType::Kind::ABI, "encode"},
 			{MagicType::Kind::ABI, "encodePacked"},
 			{MagicType::Kind::ABI, "encodeWithSelector"},
+			{MagicType::Kind::ABI, "encodeCall"},
 			{MagicType::Kind::ABI, "encodeWithSignature"},
 			{MagicType::Kind::Message, "data"},
 			{MagicType::Kind::Message, "sig"},

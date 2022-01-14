@@ -65,9 +65,10 @@ uses up at least one stack slot and there are only 1024 slots available.
 External Function Calls
 -----------------------
 
-The expressions ``this.g(8);`` and ``c.g(2);`` (where ``c`` is a contract
-instance) are also valid function calls, but this time, the function
-will be called "externally", via a message call and not directly via jumps.
+Functions can also be called using the ``this.g(8);`` and ``c.g(2);`` notation, where
+``c`` is a contract instance and ``g`` is a function belonging to ``c``.
+Calling the function ``g`` via either way results in it being called "externally", using a
+message call and not directly via jumps.
 Please note that function calls on ``this`` cannot be used in the constructor,
 as the actual contract has not been created yet.
 
@@ -105,15 +106,26 @@ otherwise, the ``value`` option would not be available.
 .. warning::
   Be careful that ``feed.info{value: 10, gas: 800}`` only locally sets the
   ``value`` and amount of ``gas`` sent with the function call, and the
-  parentheses at the end perform the actual call. So in this case, the
-  function is not called and the ``value`` and ``gas`` settings are lost.
+  parentheses at the end perform the actual call. So
+  ``feed.info{value: 10, gas: 800}`` does not call the function and
+  the ``value`` and ``gas`` settings are lost, only
+  ``feed.info{value: 10, gas: 800}()`` performs the function call.
 
 Due to the fact that the EVM considers a call to a non-existing contract to
 always succeed, Solidity uses the ``extcodesize`` opcode to check that
 the contract that is about to be called actually exists (it contains code)
-and causes an exception if it does not.
+and causes an exception if it does not. This check is skipped if the return
+data will be decoded after the call and thus the ABI decoder will catch the
+case of a non-existing contract.
+
 Note that this check is not performed in case of :ref:`low-level calls <address_related>` which
 operate on addresses rather than contract instances.
+
+.. note::
+    Be careful when using high-level calls to
+    :ref:`precompiled contracts <precompiledContracts>`,
+    since the compiler considers them non-existing according to the
+    above logic even though they execute code and can return data.
 
 Function calls also cause exceptions if the called contract itself
 throws an exception or goes out of gas.
@@ -285,7 +297,7 @@ which only need to be created if there is a dispute.
     re-created at the same address after having been destroyed. Yet, it is possible
     for that newly created contract to have a different deployed bytecode even
     though the creation bytecode has been the same (which is a requirement because
-    otherwise the address would change). This is due to the fact that the compiler
+    otherwise the address would change). This is due to the fact that the constructor
     can query external state that might have changed between the two creations
     and incorporate that into the deployed bytecode before it is stored.
 
@@ -636,7 +648,7 @@ in the following situations:
 #. If your contract receives Ether via a public getter function.
 
 For the following cases, the error data from the external call
-(if provided) is forwarded. This mean that it can either cause
+(if provided) is forwarded. This means that it can either cause
 an `Error` or a `Panic` (or whatever else was given):
 
 #. If a ``.transfer()`` fails.
@@ -706,7 +718,7 @@ The ``revert`` statement takes a custom error as direct argument without parenth
 
     revert CustomError(arg1, arg2);
 
-For backards-compatibility reasons, there is also the ``revert()`` function, which uses parentheses
+For backwards-compatibility reasons, there is also the ``revert()`` function, which uses parentheses
 and accepts a string:
 
     revert();
@@ -851,7 +863,7 @@ type of error:
 
 
 It is planned to support other types of error data in the future.
-The strings ``Error`` and ``Panic`` are currently parsed as is and are not treated as an identifiers.
+The strings ``Error`` and ``Panic`` are currently parsed as is and are not treated as identifiers.
 
 In order to catch all error cases, you have to have at least the clause
 ``catch { ...}`` or the clause ``catch (bytes memory lowLevelData) { ... }``.

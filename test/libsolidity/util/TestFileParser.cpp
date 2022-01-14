@@ -100,8 +100,26 @@ vector<solidity::frontend::test::FunctionCall> TestFileParser::parseFunctionCall
 						if (accept(Token::Library, true))
 						{
 							expect(Token::Colon);
-							call.signature = m_scanner.currentLiteral();
-							expect(Token::Identifier);
+							string libraryName;
+							if (accept(Token::String))
+							{
+								libraryName = m_scanner.currentLiteral();
+								expect(Token::String);
+								expect(Token::Colon);
+								libraryName += ':' + m_scanner.currentLiteral();
+								expect(Token::Identifier);
+							}
+							else if (accept(Token::Colon, true))
+							{
+								libraryName = ':' + m_scanner.currentLiteral();
+								expect(Token::Identifier);
+							}
+							else
+							{
+								libraryName = m_scanner.currentLiteral();
+								expect(Token::Identifier);
+							}
+							call.signature = libraryName;
 							call.kind = FunctionCall::Kind::Library;
 							call.expectations.failure = false;
 						}
@@ -407,11 +425,17 @@ Parameter TestFileParser::parseParameter()
 		if (isSigned)
 			parsed = "-" + parsed;
 
-		parameter.rawBytes = BytesUtils::applyAlign(
-			parameter.alignment,
-			parameter.abiType,
-			BytesUtils::convertNumber(parsed)
-		);
+		if (parsed.find('.') == string::npos)
+			parameter.rawBytes = BytesUtils::applyAlign(
+				parameter.alignment,
+				parameter.abiType,
+				BytesUtils::convertNumber(parsed)
+			);
+		else
+		{
+			parameter.abiType.type = isSigned ? ABIType::SignedFixedPoint : ABIType::UnsignedFixedPoint;
+			parameter.rawBytes = BytesUtils::convertFixedPoint(parsed, parameter.abiType.fractionalDigits);
+		}
 	}
 	else if (accept(Token::Failure, true))
 	{
@@ -667,7 +691,7 @@ string TestFileParser::Scanner::scanDecimalNumber()
 {
 	string number;
 	number += current();
-	while (langutil::isDecimalDigit(peek()))
+	while (langutil::isDecimalDigit(peek()) || '.' == peek())
 	{
 		advance();
 		number += current();

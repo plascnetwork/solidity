@@ -306,13 +306,13 @@ void SourceUpgrade::tryCompile() const
 	{
 		error() << "Exception during compilation: " << boost::diagnostic_information(_exception) << endl;
 	}
-	catch (std::exception const& _e)
+	catch (std::exception const& _exception)
 	{
-		error() << (_e.what() ? ": " + string(_e.what()) : ".") << endl;
+		error() << "Exception during compilation: " << boost::diagnostic_information(_exception) << endl;
 	}
 	catch (...)
 	{
-		error() << "Unknown exception during compilation." << endl;
+		error() << "Unknown exception during compilation: " << boost::current_exception_diagnostic_information() << endl;
 	}
 }
 
@@ -421,7 +421,7 @@ bool SourceUpgrade::readInputFiles()
 	if (m_args.count(g_argInputFile))
 		for (string path: m_args[g_argInputFile].as<vector<string>>())
 		{
-			auto infile = boost::filesystem::path(path);
+			boost::filesystem::path infile = path;
 			if (!boost::filesystem::exists(infile))
 			{
 				if (!ignoreMissing)
@@ -448,13 +448,12 @@ bool SourceUpgrade::readInputFiles()
 				continue;
 			}
 
-			m_sourceCodes[infile.generic_string()] = readFileAsString(infile.string());
-			path = boost::filesystem::canonical(infile).string();
+			m_sourceCodes[infile.generic_string()] = readFileAsString(infile);
 		}
 
 	if (m_sourceCodes.size() == 0)
 	{
-		warning() << "No input files given. If you wish to use the standard input please specify \"-\" explicitly." << endl;
+		warning() << "No input files given." << endl;
 		return false;
 	}
 
@@ -484,8 +483,8 @@ ReadCallback::Callback SourceUpgrade::fileReader()
 	{
 		try
 		{
-			auto path = boost::filesystem::path(_path);
-			auto canonicalPath = boost::filesystem::weakly_canonical(path);
+			boost::filesystem::path path = _path;
+			boost::filesystem::path canonicalPath = boost::filesystem::weakly_canonical(path);
 			bool isAllowed = false;
 			for (auto const& allowedDir: m_allowedDirectories)
 			{
@@ -508,7 +507,7 @@ ReadCallback::Callback SourceUpgrade::fileReader()
 			if (!boost::filesystem::is_regular_file(canonicalPath))
 				return ReadCallback::Result{false, "Not a valid file."};
 
-			auto contents = readFileAsString(canonicalPath.string());
+			string contents = readFileAsString(canonicalPath);
 			m_sourceCodes[path.generic_string()] = contents;
 			return ReadCallback::Result{true, contents};
 		}
@@ -518,7 +517,7 @@ ReadCallback::Callback SourceUpgrade::fileReader()
 		}
 		catch (...)
 		{
-			return ReadCallback::Result{false, "Unknown exception in read callback."};
+			return ReadCallback::Result{false, "Unknown exception in read callback: " + boost::current_exception_diagnostic_information()};
 		}
 	};
 
@@ -534,7 +533,7 @@ void SourceUpgrade::resetCompiler()
 
 void SourceUpgrade::resetCompiler(ReadCallback::Callback const& _callback)
 {
-	m_compiler.reset(new CompilerStack(_callback));
+	m_compiler = std::make_unique<CompilerStack>(_callback);
 	m_compiler->setSources(m_sourceCodes);
 	m_compiler->setParserErrorRecovery(true);
 }

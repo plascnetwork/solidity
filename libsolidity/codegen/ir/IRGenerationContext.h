@@ -29,6 +29,8 @@
 #include <libsolidity/codegen/MultiUseYulFunctionCollector.h>
 #include <libsolidity/codegen/ir/Common.h>
 
+#include <liblangutil/CharStreamProvider.h>
+#include <liblangutil/DebugInfoSelection.h>
 #include <liblangutil/EVMVersion.h>
 
 #include <libsolutil/Common.h>
@@ -65,16 +67,24 @@ using InternalDispatchMap = std::map<YulArity, DispatchSet>;
 class IRGenerationContext
 {
 public:
+	enum class ExecutionContext { Creation, Deployed };
+
 	IRGenerationContext(
 		langutil::EVMVersion _evmVersion,
+		ExecutionContext _executionContext,
 		RevertStrings _revertStrings,
 		OptimiserSettings _optimiserSettings,
-		std::map<std::string, unsigned> _sourceIndices
+		std::map<std::string, unsigned> _sourceIndices,
+		langutil::DebugInfoSelection const& _debugInfoSelection,
+		langutil::CharStreamProvider const* _soliditySourceProvider
 	):
 		m_evmVersion(_evmVersion),
+		m_executionContext(_executionContext),
 		m_revertStrings(_revertStrings),
 		m_optimiserSettings(std::move(_optimiserSettings)),
-		m_sourceIndices(std::move(_sourceIndices))
+		m_sourceIndices(std::move(_sourceIndices)),
+		m_debugInfoSelection(_debugInfoSelection),
+		m_soliditySourceProvider(_soliditySourceProvider)
 	{}
 
 	MultiUseYulFunctionCollector& functionCollector() { return m_functions; }
@@ -139,6 +149,7 @@ public:
 	YulUtilFunctions utils();
 
 	langutil::EVMVersion evmVersion() const { return m_evmVersion; }
+	ExecutionContext executionContext() const { return m_executionContext; }
 
 	void setArithmetic(Arithmetic _value) { m_arithmetic = _value; }
 	Arithmetic arithmetic() const { return m_arithmetic; }
@@ -161,12 +172,21 @@ public:
 	void copyFunctionIDsFrom(IRGenerationContext const& _other);
 
 	std::map<std::string, unsigned> const& sourceIndices() const { return m_sourceIndices; }
+	void markSourceUsed(std::string const& _name) { m_usedSourceNames.insert(_name); }
+	std::set<std::string> const& usedSourceNames() const { return m_usedSourceNames; }
+
+	bool immutableRegistered(VariableDeclaration const& _varDecl) const { return m_immutableVariables.count(&_varDecl); }
+
+	langutil::DebugInfoSelection debugInfoSelection() const { return m_debugInfoSelection; }
+	langutil::CharStreamProvider const* soliditySourceProvider() const { return m_soliditySourceProvider; }
 
 private:
 	langutil::EVMVersion m_evmVersion;
+	ExecutionContext m_executionContext;
 	RevertStrings m_revertStrings;
 	OptimiserSettings m_optimiserSettings;
 	std::map<std::string, unsigned> m_sourceIndices;
+	std::set<std::string> m_usedSourceNames;
 	ContractDefinition const* m_mostDerivedContract = nullptr;
 	std::map<VariableDeclaration const*, IRVariable> m_localVariables;
 	/// Memory offsets reserved for the values of immutable variables during contract creation.
@@ -203,6 +223,9 @@ private:
 	std::map<int64_t, uint64_t> m_functionIDs;
 
 	std::set<ContractDefinition const*, ASTNode::CompareByID> m_subObjects;
+
+	langutil::DebugInfoSelection m_debugInfoSelection = {};
+	langutil::CharStreamProvider const* m_soliditySourceProvider = nullptr;
 };
 
 }

@@ -11,7 +11,7 @@ sign and verify signatures, and setup the payment channel.
 Creating and verifying signatures
 =================================
 
-Imagine Alice wants to send a quantity of Ether to Bob, i.e.
+Imagine Alice wants to send some Ether to Bob, i.e.
 Alice is the sender and Bob is the recipient.
 
 Alice only needs to send cryptographically signed messages off-chain
@@ -151,7 +151,7 @@ The full contract
 
         constructor() payable {}
 
-        function claimPayment(uint256 amount, uint256 nonce, bytes memory signature) public {
+        function claimPayment(uint256 amount, uint256 nonce, bytes memory signature) external {
             require(!usedNonces[nonce]);
             usedNonces[nonce] = true;
 
@@ -164,7 +164,7 @@ The full contract
         }
 
         /// destroy the contract and reclaim the leftover funds.
-        function shutdown() public {
+        function shutdown() external {
             require(msg.sender == owner);
             selfdestruct(payable(msg.sender));
         }
@@ -346,18 +346,18 @@ The full contract
         address payable public recipient;   // The account receiving the payments.
         uint256 public expiration;  // Timeout in case the recipient never closes.
 
-        constructor (address payable _recipient, uint256 duration)
+        constructor (address payable recipientAddress, uint256 duration)
             payable
         {
             sender = payable(msg.sender);
-            recipient = _recipient;
+            recipient = recipientAddress;
             expiration = block.timestamp + duration;
         }
 
         /// the recipient can close the channel at any time by presenting a
         /// signed amount from the sender. the recipient will be sent that amount,
         /// and the remainder will go back to the sender
-        function close(uint256 amount, bytes memory signature) public {
+        function close(uint256 amount, bytes memory signature) external {
             require(msg.sender == recipient);
             require(isValidSignature(amount, signature));
 
@@ -366,7 +366,7 @@ The full contract
         }
 
         /// the sender can extend the expiration at any time
-        function extend(uint256 newExpiration) public {
+        function extend(uint256 newExpiration) external {
             require(msg.sender == sender);
             require(newExpiration > expiration);
 
@@ -375,7 +375,7 @@ The full contract
 
         /// if the timeout is reached without the recipient closing the channel,
         /// then the Ether is released back to the sender.
-        function claimTimeout() public {
+        function claimTimeout() external {
             require(block.timestamp >= expiration);
             selfdestruct(sender);
         }

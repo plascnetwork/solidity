@@ -1187,6 +1187,7 @@ string ABIFunctions::abiDecodingFunctionArrayAvailableLength(ArrayType const& _t
 	solAssert(_type.dataStoredIn(DataLocation::Memory), "");
 	if (_type.isByteArray())
 		return abiDecodingFunctionByteArrayAvailableLength(_type, _fromMemory);
+	solAssert(_type.calldataStride() > 0, "");
 
 	string functionName =
 		"abi_decode_available_length_" +
@@ -1203,11 +1204,11 @@ string ABIFunctions::abiDecodingFunctionArrayAvailableLength(ArrayType const& _t
 					mstore(array, length)
 					dst := add(array, 0x20)
 				</dynamic>
-				let src := offset
-				if gt(add(src, mul(length, <stride>)), end) {
+				let srcEnd := add(offset, mul(length, <stride>))
+				if gt(srcEnd, end) {
 					<revertInvalidStride>()
 				}
-				for { let i := 0 } lt(i, length) { i := add(i, 1) }
+				for { let src := offset } lt(src, srcEnd) { src := add(src, <stride>) }
 				{
 					<?dynamicBase>
 						let innerOffset := <load>(src)
@@ -1218,7 +1219,6 @@ string ABIFunctions::abiDecodingFunctionArrayAvailableLength(ArrayType const& _t
 					</dynamicBase>
 					mstore(dst, <decodingFun>(elementPos, end))
 					dst := add(dst, 0x20)
-					src := add(src, <stride>)
 				}
 			}
 		)");

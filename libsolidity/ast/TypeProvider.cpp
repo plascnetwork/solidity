@@ -572,9 +572,10 @@ MagicType const* TypeProvider::meta(Type const* _type)
 	solAssert(
 		_type && (
 			_type->category() == Type::Category::Contract ||
-			_type->category() == Type::Category::Integer
+			_type->category() == Type::Category::Integer ||
+			_type->category() == Type::Category::Enum
 		),
-		"Only contracts or integer types supported for now."
+		"Only enum, contracts or integer types supported for now."
 	);
 	return createAndGet<MagicType>(_type);
 }
@@ -582,4 +583,9 @@ MagicType const* TypeProvider::meta(Type const* _type)
 MappingType const* TypeProvider::mapping(Type const* _keyType, Type const* _valueType)
 {
 	return createAndGet<MappingType>(_keyType, _valueType);
+}
+
+UserDefinedValueType const* TypeProvider::userDefinedValueType(UserDefinedValueTypeDefinition const& _definition)
+{
+	return createAndGet<UserDefinedValueType>(_definition);
 }

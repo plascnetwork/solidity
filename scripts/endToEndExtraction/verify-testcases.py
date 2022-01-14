@@ -7,7 +7,7 @@
 #     ./soltest --color_output=false --log_level=test_suite -t semanticTests/extracted/ -- --no-smt
 #         --evmonepath /Users/alex/evmone/lib/libevmone.dylib --show-messages > semanticTests.trace
 #
-# verify-testcases.py will compare both traces. If these traces are identical, the extracted tests where
+# verify-testcases.py will compare both traces. If these traces are identical, the extracted tests were
 # identical with the tests specified in SolidityEndToEndTest.cpp.
 #
 # pylint: disable=too-many-instance-attributes
@@ -75,7 +75,7 @@ class TraceAnalyser:
         self.ready = False
 
     def analyse(self):
-        with open(self.file, "r") as trace_file:
+        with open(self.file, "r", encoding='utf8') as trace_file:
             trace = None
             test_case = None
             for line in trace_file.readlines():
@@ -158,7 +158,7 @@ class TraceAnalyser:
         for trace_id, trace in enumerate(left.traces):
             left_trace = trace
             right_trace = right.traces[trace_id]
-            assert (left_trace.kind == right_trace.kind)
+            assert left_trace.kind == right_trace.kind
             if str(left_trace) != str(right_trace):
                 mismatch_info = "    " + str(left_trace) + "\n"
                 mismatch_info += "    " + str(right_trace) + "\n"
@@ -179,7 +179,7 @@ def main(argv):
     extracted_tests_trace_file = None
     end_to_end_trace_file = None
     try:
-        opts, args = getopt.getopt(argv, "s:e:")
+        opts, _args = getopt.getopt(argv, "s:e:")
     except getopt.GetoptError:
         print("verify-testcases.py [-s <path to semantic-trace>] [-e <path to endToEndExtraction-trace>]")
         sys.exit(2)

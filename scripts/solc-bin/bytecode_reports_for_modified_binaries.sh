@@ -50,14 +50,14 @@
 # FIXME: Can't use set -u because the old Bash on macOS treats empty arrays as unbound variables
 set -eo pipefail
 
-die()
+function die
 {
     # shellcheck disable=SC2059
     >&2 printf "ERROR: $1\n" "${@:2}"
     exit 1
 }
 
-get_reported_solc_version()
+function get_reported_solc_version
 {
     local solc_binary="$1"
 
@@ -70,7 +70,7 @@ get_reported_solc_version()
     echo "$version_banner" | tail -n 1 | sed -n -E 's/^Version: (.*)$/\1/p'
 }
 
-validate_reported_version()
+function validate_reported_version
 {
     local reported_version="$1"
     local expected_version_and_commit="$2"
@@ -109,7 +109,6 @@ cd "$tmp_dir"
 git clone https://github.com/ethereum/solc-js.git "$solcjs_dir"
 cd "$solcjs_dir"
 npm install
-rm soljson.js
 
 cd "${solc_bin_dir}/${platform}/"
 echo "Commit range: ${base_ref}..${top_ref}"

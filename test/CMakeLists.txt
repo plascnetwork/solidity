@@ -103,11 +103,13 @@ set(libsolidity_sources
     libsolidity/SyntaxTest.h
     libsolidity/ViewPureChecker.cpp
     libsolidity/analysis/FunctionCallGraph.cpp
+    libsolidity/interface/FileReader.cpp
 )
 detect_stray_source_files("${libsolidity_sources}" "libsolidity/")
 
 set(libsolidity_util_sources
     libsolidity/util/BytesUtils.cpp
+    libsolidity/util/BytesUtilsTests.cpp
     libsolidity/util/BytesUtils.h
     libsolidity/util/ContractABIUtils.cpp
     libsolidity/util/ContractABIUtils.h
@@ -128,6 +130,8 @@ set(libyul_sources
     libyul/CompilabilityChecker.cpp
     libyul/ControlFlowGraphTest.cpp
     libyul/ControlFlowGraphTest.h
+    libyul/ControlFlowSideEffectsTest.cpp
+    libyul/ControlFlowSideEffectsTest.h
     libyul/EVMCodeTransformTest.cpp
     libyul/EVMCodeTransformTest.h
     libyul/EwasmTranslationTest.cpp
@@ -135,11 +139,14 @@ set(libyul_sources
     libyul/FunctionSideEffects.cpp
     libyul/FunctionSideEffects.h
     libyul/Inliner.cpp
+    libyul/KnowledgeBaseTest.cpp
     libyul/Metrics.cpp
     libyul/ObjectCompilerTest.cpp
     libyul/ObjectCompilerTest.h
     libyul/ObjectParser.cpp
     libyul/Parser.cpp
+    libyul/StackLayoutGeneratorTest.cpp
+    libyul/StackLayoutGeneratorTest.h
     libyul/SyntaxTest.h
     libyul/SyntaxTest.cpp
     libyul/YulInterpreterTest.cpp
@@ -155,6 +162,7 @@ set(solcli_sources
     solc/Common.cpp
     solc/Common.h
     solc/CommandLineInterface.cpp
+    solc/CommandLineInterfaceAllowPaths.cpp
     solc/CommandLineParser.cpp
 )
 detect_stray_source_files("${solcli_sources}" "solc/")

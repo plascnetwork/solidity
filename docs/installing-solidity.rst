@@ -313,7 +313,8 @@ The following are dependencies for all builds of Solidity:
 +===================================+=======================================================+
 | `CMake`_ (version 3.13+)          | Cross-platform build file generator.                  |
 +-----------------------------------+-------------------------------------------------------+
-| `Boost`_  (version 1.65+)         | C++ libraries.                                        |
+| `Boost`_ (version 1.77+ on        | C++ libraries.                                        |
+| Windows, 1.65+ otherwise)         |                                                       |
 +-----------------------------------+-------------------------------------------------------+
 | `Git`_                            | Command-line tool for retrieving source code.         |
 +-----------------------------------+-------------------------------------------------------+
@@ -334,6 +335,16 @@ The following are dependencies for all builds of Solidity:
     prior to running the cmake command to configure solidity.
 
     Starting from 0.5.10 linking against Boost 1.70+ should work without manual intervention.
+
+.. note::
+    The default build configuration requires a specific Z3 version (the latest one at the time the
+    code was last updated). Changes introduced between Z3 releases often result in slightly different
+    (but still valid) results being returned. Our SMT tests do not account for these differences and
+    will likely fail with a different version than the one they were written for. This does not mean
+    that a build using a different version is faulty. If you pass ``-DSTRICT_Z3_VERSION=OFF`` option
+    to CMake, you can build with any version that satisfies the requirement given in the table above.
+    If you do this, however, please remember to pass the ``--no-smt`` option to ``scripts/tests.sh``
+    to skip the SMT tests.
 
 Minimum Compiler Versions
 ^^^^^^^^^^^^^^^^^^^^^^^^^
@@ -378,6 +389,8 @@ You need to install the following dependencies for Windows builds of Solidity:
 +-----------------------------------+-------------------------------------------------------+
 | `Visual Studio 2019`_  (Optional) | C++ compiler and dev environment.                     |
 +-----------------------------------+-------------------------------------------------------+
+| `Boost`_ (version 1.77+)          | C++ libraries.                                        |
++-----------------------------------+-------------------------------------------------------+
 
 If you already have one IDE and only need the compiler and libraries,
 you could install Visual Studio 2019 Build Tools.
@@ -398,24 +411,13 @@ in Visual Studio 2019 Build Tools or Visual Studio 2019:
 .. _Visual Studio 2019: https://www.visualstudio.com/vs/
 .. _Visual Studio 2019 Build Tools: https://www.visualstudio.com/downloads/#build-tools-for-visual-studio-2019
 
-Dependencies Helper Script
---------------------------
-
-We have a helper script which you can use to install all required external dependencies
-on macOS, Windows and on numerous Linux distros.
-
-.. code-block:: bash
-
-    ./scripts/install_deps.sh
-
-Or, on Windows:
+We have a helper script which you can use to install all required external dependencies:
 
 .. code-block:: bat
 
     scripts\install_deps.ps1
 
-Note that the latter command will install ``boost`` and ``cmake`` to the ``deps`` subdirectory, while the former command
-will attempt to install the dependencies globally.
+This will install ``boost`` and ``cmake`` to the ``deps`` subdirectory.
 
 Clone the Repository
 --------------------

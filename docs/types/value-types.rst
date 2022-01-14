@@ -66,7 +66,7 @@ Shifts
 ^^^^^^
 
 The result of a shift operation has the type of the left operand, truncating the result to match the type.
-The right operand must be of unsigned type, trying to shift by an signed type will produce a compilation error.
+The right operand must be of unsigned type, trying to shift by a signed type will produce a compilation error.
 
 Shifts can be "simulated" using multiplication by powers of two in the following way. Note that the truncation
 to the type of the left operand is always performed at the end, but not mentioned explicitly.
@@ -108,7 +108,7 @@ Division
 
 Since the type of the result of an operation is always the type of one of
 the operands, division on integers always results in an integer.
-In Solidity, division rounds towards zero. This mean that ``int256(-5) / int256(2) == int256(-2)``.
+In Solidity, division rounds towards zero. This means that ``int256(-5) / int256(2) == int256(-2)``.
 
 Note that in contrast, division on :ref:`literals<rational_literals>` results in fractional values
 of arbitrary precision.
@@ -241,7 +241,7 @@ and to send Ether (in units of wei) to a payable address using the ``transfer`` 
 .. code-block:: solidity
     :force:
 
-    address payable x = address(0x123);
+    address payable x = payable(0x123);
     address myAddress = address(this);
     if (x.balance < 10 && myAddress.balance >= 10) x.transfer(10);
 
@@ -437,14 +437,16 @@ an error. You can prepend (for integer types) or append (for bytesNN types) zero
 Rational and Integer Literals
 -----------------------------
 
-Integer literals are formed from a sequence of numbers in the range 0-9.
+Integer literals are formed from a sequence of digits in the range 0-9.
 They are interpreted as decimals. For example, ``69`` means sixty nine.
 Octal literals do not exist in Solidity and leading zeros are invalid.
 
-Decimal fraction literals are formed by a ``.`` with at least one number on
+Decimal fractional literals are formed by a ``.`` with at least one number on
 one side.  Examples include ``1.``, ``.1`` and ``1.3``.
 
-Scientific notation is also supported, where the base can have fractions and the exponent cannot.
+Scientific notation in the form of ``2e10`` is also supported, where the
+mantissa can be fractional but the exponent has to be an integer.
+The literal ``MeE`` is equivalent to ``M * 10**E``.
 Examples include ``2e10``, ``-2e10``, ``2e-10``, ``2.5e1``.
 
 Underscores can be used to separate the digits of a numeric literal to aid readability.
@@ -507,7 +509,7 @@ String literals are written with either double or single-quotes (``"foo"`` or ``
 
 For example, with ``bytes32 samevar = "stringliteral"`` the string literal is interpreted in its raw byte form when assigned to a ``bytes32`` type.
 
-String literals can only contain printable ASCII characters, which means the characters between and including 0x1F .. 0x7E.
+String literals can only contain printable ASCII characters, which means the characters between and including 0x20 .. 0x7E.
 
 Additionally, string literals also support the following escape characters:
 
@@ -587,11 +589,14 @@ Enums cannot have more than 256 members.
 The data representation is the same as for enums in C: The options are represented by
 subsequent unsigned integer values starting from ``0``.
 
+Using ``type(NameOfEnum).min`` and ``type(NameOfEnum).max`` you can get the
+smallest and respectively largest value of the given enum.
+
 
 .. code-block:: solidity
 
     // SPDX-License-Identifier: GPL-3.0
-    pragma solidity >=0.4.16 <0.9.0;
+    pragma solidity ^0.8.8;
 
     contract test {
         enum ActionChoices { GoLeft, GoRight, GoStraight, SitStill }
@@ -612,11 +617,83 @@ subsequent unsigned integer values starting from ``0``.
         function getDefaultChoice() public pure returns (uint) {
             return uint(defaultChoice);
         }
+
+        function getLargestValue() public pure returns (ActionChoices) {
+            return type(ActionChoices).max;
+        }
+
+        function getSmallestValue() public pure returns (ActionChoices) {
+            return type(ActionChoices).min;
+        }
     }
 
 .. note::
     Enums can also be declared on the file level, outside of contract or library definitions.
 
+.. index:: ! user defined value type, custom type
+
+.. _user-defined-value-types:
+
+User Defined Value Types
+------------------------
+
+A user defined value type allows creating a zero cost abstraction over an elementary value type.
+This is similar to an alias, but with stricter type requirements.
+
+A user defined value type is defined using ``type C is V``, where ``C`` is the name of the newly
+introduced type and ``V`` has to be a built-in value type (the "underlying type"). The function
+``C.wrap`` is used to convert from the underlying type to the custom type. Similarly, the
+function ``C.unwrap`` is used to convert from the custom type to the underlying type.
+
+The type ``C`` does not have any operators or bound member functions. In particular, even the
+operator ``==`` is not defined. Explicit and implicit conversions to and from other types are
+disallowed.
+
+The data-representation of values of such types are inherited from the underlying type
+and the underlying type is also used in the ABI.
+
+The following example illustrates a custom type ``UFixed256x18`` representing a decimal fixed point
+type with 18 decimals and a minimal library to do arithmetic operations on the type.
+
+
+.. code-block:: solidity
+
+    // SPDX-License-Identifier: GPL-3.0
+    pragma solidity ^0.8.8;
+
+    // Represent a 18 decimal, 256 bit wide fixed point type using a user defined value type.
+    type UFixed256x18 is uint256;
+
+    /// A minimal library to do fixed point operations on UFixed256x18.
+    library FixedMath {
+        uint constant multiplier = 10**18;
+
+        /// Adds two UFixed256x18 numbers. Reverts on overflow, relying on checked
+        /// arithmetic on uint256.
+        function add(UFixed256x18 a, UFixed256x18 b) internal pure returns (UFixed256x18) {
+            return UFixed256x18.wrap(UFixed256x18.unwrap(a) + UFixed256x18.unwrap(b));
+        }
+        /// Multiplies UFixed256x18 and uint256. Reverts on overflow, relying on checked
+        /// arithmetic on uint256.
+        function mul(UFixed256x18 a, uint256 b) internal pure returns (UFixed256x18) {
+            return UFixed256x18.wrap(UFixed256x18.unwrap(a) * b);
+        }
+        /// Take the floor of a UFixed256x18 number.
+        /// @return the largest integer that does not exceed `a`.
+        function floor(UFixed256x18 a) internal pure returns (uint256) {
+            return UFixed256x18.unwrap(a) / multiplier;
+        }
+        /// Turns a uint256 into a UFixed256x18 of the same value.
+        /// Reverts if the integer is too large.
+        function toUFixed256x18(uint256 a) internal pure returns (UFixed256x18) {
+            return UFixed256x18.wrap(a * multiplier);
+        }
+    }
+
+Notice how ``UFixed256x18.wrap`` and ``FixedMath.toUFixed256x18`` have the same signature but
+perform two very different operations: The ``UFixed256x18.wrap`` function returns a ``UFixed256x18``
+that has the same data representation as the input, whereas ``toUFixed256x18`` returns a
+``UFixed256x18`` that has the same numerical value.
 
 .. index:: ! function type, ! type; function
 

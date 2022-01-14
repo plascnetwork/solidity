@@ -1024,6 +1024,35 @@ bool ExpressionCompiler::visit(FunctionCall const& _functionCall)
 			);
 			break;
 		}
+		case FunctionType::Kind::Wrap:
+		case FunctionType::Kind::Unwrap:
+		{
+			solAssert(arguments.size() == 1, "");
+			Type const* argumentType = arguments.at(0)->annotation().type;
+			Type const* functionCallType = _functionCall.annotation().type;
+			solAssert(argumentType, "");
+			solAssert(functionCallType, "");
+			FunctionType::Kind kind = functionType->kind();
+			if (kind == FunctionType::Kind::Wrap)
+			{
+				solAssert(
+					argumentType->isImplicitlyConvertibleTo(
+						dynamic_cast<UserDefinedValueType const&>(*functionCallType).underlyingType()
+					),
+					""
+				);
+				solAssert(argumentType->isImplicitlyConvertibleTo(*function.parameterTypes()[0]), "");
+			}
+			else
+				solAssert(
+					dynamic_cast<UserDefinedValueType const&>(*argumentType) ==
+					dynamic_cast<UserDefinedValueType const&>(*function.parameterTypes()[0]),
+					""
+				);
+
+			acceptAndConvert(*arguments[0], *function.parameterTypes()[0]);
+			break;
+		}
 		case FunctionType::Kind::BlockHash:
 		{
 			acceptAndConvert(*arguments[0], *function.parameterTypes()[0], true);
@@ -1298,28 +1327,47 @@ bool ExpressionCompiler::visit(FunctionCall const& _functionCall)
 		case FunctionType::Kind::ABIEncode:
 		case FunctionType::Kind::ABIEncodePacked:
 		case FunctionType::Kind::ABIEncodeWithSelector:
+		case FunctionType::Kind::ABIEncodeCall:
 		case FunctionType::Kind::ABIEncodeWithSignature:
 		{
 			bool const isPacked = function.kind() == FunctionType::Kind::ABIEncodePacked;
 			bool const hasSelectorOrSignature =
 				function.kind() == FunctionType::Kind::ABIEncodeWithSelector ||
+				function.kind() == FunctionType::Kind::ABIEncodeCall ||
 				function.kind() == FunctionType::Kind::ABIEncodeWithSignature;
 
 			TypePointers argumentTypes;
-			TypePointers targetTypes;
-			for (unsigned i = 0; i < arguments.size(); ++i)
+
+			ASTNode::listAccept(arguments, *this);
+
+			if (function.kind() == FunctionType::Kind::ABIEncodeCall)
 			{
-				arguments[i]->accept(*this);
-				// Do not keep the selector as part of the ABI encoded args
-				if (!hasSelectorOrSignature || i > 0)
-					argumentTypes.push_back(arguments[i]->annotation().type);
+				solAssert(arguments.size() == 2);
+
+				auto const functionPtr = dynamic_cast<FunctionTypePointer>(arguments[0]->annotation().type);
+				solAssert(functionPtr);
+				solAssert(functionPtr->sizeOnStack() == 2);
+
+				// Account for tuples with one component which become that component
+				if (auto const tupleType = dynamic_cast<TupleType const*>(arguments[1]->annotation().type))
+					argumentTypes = tupleType->components();
+				else
+					argumentTypes.emplace_back(arguments[1]->annotation().type);
 			}
+			else
+				for (unsigned i = 0; i < arguments.size(); ++i)
+				{
+					// Do not keep the selector as part of the ABI encoded args
+					if (!hasSelectorOrSignature || i > 0)
+						argumentTypes.push_back(arguments[i]->annotation().type);
+				}
+
 			utils().fetchFreeMemoryPointer();
-			// stack now: [<selector>] <arg1> .. <argN> <free_mem>
+			// stack now: [<selector/functionPointer/signature>] <arg1> .. <argN> <free_mem>
 
 			// adjust by 32(+4) bytes to accommodate the length(+selector)
 			m_context << u256(32 + (hasSelectorOrSignature ? 4 : 0)) << Instruction::ADD;
-			// stack now: [<selector>] <arg1> .. <argN> <data_encoding_area_start>
+			// stack now: [<selector/functionPointer/signature>] <arg1> .. <argN> <data_encoding_area_start>
 
 			if (isPacked)
 			{
@@ -1332,7 +1380,7 @@ bool ExpressionCompiler::visit(FunctionCall const& _functionCall)
 				utils().abiEncode(argumentTypes, TypePointers());
 			}
 			utils().fetchFreeMemoryPointer();
-			// stack: [<selector>] <data_encoding_area_end> <bytes_memory_ptr>
+			// stack: [<selector/functionPointer/signature>] <data_encoding_area_end> <bytes_memory_ptr>
 
 			// size is end minus start minus length slot
 			m_context.appendInlineAssembly(R"({
@@ -1340,16 +1388,17 @@ bool ExpressionCompiler::visit(FunctionCall const& _functionCall)
 			})", {"mem_end", "mem_ptr"});
 			m_context << Instruction::SWAP1;
 			utils().storeFreeMemoryPointer();
-			// stack: [<selector>] <memory ptr>
+			// stack: [<selector/functionPointer/signature>] <memory ptr>
 
 			if (hasSelectorOrSignature)
 			{
-				// stack: <selector> <memory pointer>
+				// stack: <selector/functionPointer/signature> <memory pointer>
 				solAssert(arguments.size() >= 1, "");
 				Type const* selectorType = arguments[0]->annotation().type;
 				utils().moveIntoStack(selectorType->sizeOnStack());
 				Type const* dataOnStack = selectorType;
-				// stack: <memory pointer> <selector>
+
+				// stack: <memory pointer> <selector/functionPointer/signature>
 				if (function.kind() == FunctionType::Kind::ABIEncodeWithSignature)
 				{
 					// hash the signature
@@ -1361,7 +1410,7 @@ bool ExpressionCompiler::visit(FunctionCall const& _functionCall)
 					else
 					{
 						utils().fetchFreeMemoryPointer();
-						// stack: <memory pointer> <selector> <free mem ptr>
+						// stack: <memory pointer> <signature> <free mem ptr>
 						utils().packedEncode(TypePointers{selectorType}, TypePointers());
 						utils().toSizeAfterFreeMemoryPointer();
 						m_context << Instruction::KECCAK256;
@@ -1370,10 +1419,16 @@ bool ExpressionCompiler::visit(FunctionCall const& _functionCall)
 						dataOnStack = TypeProvider::fixedBytes(32);
 					}
 				}
-				else
+				else if (function.kind() == FunctionType::Kind::ABIEncodeCall)
 				{
-					solAssert(function.kind() == FunctionType::Kind::ABIEncodeWithSelector, "");
+					// stack: <memory pointer> <functionPointer>
+					// Extract selector from the stack
+					m_context << Instruction::SWAP1 << Instruction::POP;
+					// Conversion will be done below
+					dataOnStack = TypeProvider::uint(32);
 				}
+				else
+					solAssert(function.kind() == FunctionType::Kind::ABIEncodeWithSelector, "");
 
 				utils().convertType(*dataOnStack, FixedBytesType(4), true);
 
@@ -1974,12 +2029,13 @@ bool ExpressionCompiler::visit(MemberAccess const& _memberAccess)
 		else if (member == "min" || member == "max")
 		{
 			MagicType const* arg = dynamic_cast<MagicType const*>(_memberAccess.expression().annotation().type);
-			IntegerType const* integerType = dynamic_cast<IntegerType const*>(arg->typeArgument());
-
-			if (member == "min")
-				m_context << integerType->min();
+			if (IntegerType const* integerType = dynamic_cast<IntegerType const*>(arg->typeArgument()))
+				m_context << (member == "min" ? integerType->min() : integerType->max());
+			else if (EnumType const* enumType = dynamic_cast<EnumType const*>(arg->typeArgument()))
+				m_context << (member == "min" ? enumType->minValue() : enumType->maxValue());
 			else
-				m_context << integerType->max();
+				solAssert(false, "min/max not available for the given type.");
+
 		}
 		else if ((set<string>{"encode", "encodePacked", "encodeWithSelector", "encodeWithSignature", "decode"}).count(member))
 		{
@@ -2272,8 +2328,7 @@ bool ExpressionCompiler::visit(IndexRangeAccess const& _indexAccess)
 	solUnimplementedAssert(
 		arrayType->location() == DataLocation::CallData &&
 		arrayType->isDynamicallySized() &&
-		!arrayType->baseType()->isDynamicallyEncoded(),
-		""
+		!arrayType->baseType()->isDynamicallyEncoded()
 	);
 
 	if (_indexAccess.startExpression())
@@ -2343,6 +2398,10 @@ void ExpressionCompiler::endVisit(Identifier const& _identifier)
 		// no-op
 	}
 	else if (dynamic_cast<EnumDefinition const*>(declaration))
+	{
+		// no-op
+	}
+	else if (dynamic_cast<UserDefinedValueTypeDefinition const*>(declaration))
 	{
 		// no-op
 	}
@@ -2815,9 +2874,21 @@ void ExpressionCompiler::appendExternalFunctionCall(
 	// Check the target contract exists (has code) for non-low-level calls.
 	if (funKind == FunctionType::Kind::External || funKind == FunctionType::Kind::DelegateCall)
 	{
-		m_context << Instruction::DUP1 << Instruction::EXTCODESIZE << Instruction::ISZERO;
-		m_context.appendConditionalRevert(false, "Target contract does not contain code");
-		existenceChecked = true;
+		size_t encodedHeadSize = 0;
+		for (auto const& t: returnTypes)
+			encodedHeadSize += t->decodingType()->calldataHeadSize();
+		// We do not need to check extcodesize if we expect return data, since if there is no
+		// code, the call will return empty data and the ABI decoder will revert.
+		if (
+			encodedHeadSize == 0 ||
+			!haveReturndatacopy ||
+			m_context.revertStrings() >= RevertStrings::Debug
+		)
+		{
+			m_context << Instruction::DUP1 << Instruction::EXTCODESIZE << Instruction::ISZERO;
+			m_context.appendConditionalRevert(false, "Target contract does not contain code");
+			existenceChecked = true;
+		}
 	}
 
 	if (_functionType.gasSet())

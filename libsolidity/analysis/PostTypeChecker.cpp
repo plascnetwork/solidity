@@ -25,7 +25,6 @@
 #include <libsolutil/Algorithms.h>
 #include <libsolutil/FunctionSelector.h>
 
-#include <boost/range/adaptor/map.hpp>
 #include <memory>
 
 using namespace std;
@@ -36,14 +35,14 @@ using namespace solidity::frontend;
 bool PostTypeChecker::check(ASTNode const& _astRoot)
 {
 	_astRoot.accept(*this);
-	return Error::containsOnlyWarnings(m_errorReporter.errors());
+	return !Error::containsErrors(m_errorReporter.errors());
 }
 
 bool PostTypeChecker::finalize()
 {
 	for (auto& checker: m_checkers)
 		checker->finalize();
-	return Error::containsOnlyWarnings(m_errorReporter.errors());
+	return !Error::containsErrors(m_errorReporter.errors());
 }
 
 bool PostTypeChecker::visit(ContractDefinition const& _contractDefinition)

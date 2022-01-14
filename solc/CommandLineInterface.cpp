@@ -23,6 +23,9 @@
  */
 #include <solc/CommandLineInterface.h>
 
+#include <solc/Exceptions.h>
+
+#include "license.h"
 #include "solidity/BuildInfo.h"
 
 #include <libsolidity/interface/Version.h>
@@ -35,6 +38,8 @@
 #include <libsolidity/interface/DebugSettings.h>
 #include <libsolidity/interface/ImportRemapper.h>
 #include <libsolidity/interface/StorageLayout.h>
+#include <libsolidity/lsp/LanguageServer.h>
+#include <libsolidity/lsp/Transport.h>
 
 #include <libyul/AssemblyStack.h>
 
@@ -53,6 +58,7 @@
 #include <libsolutil/JSON.h>
 
 #include <algorithm>
+#include <fstream>
 #include <memory>
 
 #include <range/v3/view/map.hpp>
@@ -154,6 +160,8 @@ static bool coloredOutput(CommandLineOptions const& _options)
 
 void CommandLineInterface::handleBinary(string const& _contract)
 {
+	solAssert(m_options.input.mode == InputMode::Compiler || m_options.input.mode == InputMode::CompilerWithASTImport, "");
+
 	if (m_options.compiler.outputs.binary)
 	{
 		if (!m_options.output.dir.empty())
@@ -178,6 +186,8 @@ void CommandLineInterface::handleBinary(string const& _contract)
 
 void CommandLineInterface::handleOpcode(string const& _contract)
 {
+	solAssert(m_options.input.mode == InputMode::Compiler || m_options.input.mode == InputMode::CompilerWithASTImport, "");
+
 	if (!m_options.output.dir.empty())
 		createFile(m_compiler->filesystemFriendlyName(_contract) + ".opcode", evmasm::disassemble(m_compiler->object(_contract).bytecode));
 	else
@@ -190,6 +200,8 @@ void CommandLineInterface::handleOpcode(string const& _contract)
 
 void CommandLineInterface::handleIR(string const& _contractName)
 {
+	solAssert(m_options.input.mode == InputMode::Compiler || m_options.input.mode == InputMode::CompilerWithASTImport, "");
+
 	if (!m_options.compiler.outputs.ir)
 		return;
 
@@ -204,6 +216,8 @@ void CommandLineInterface::handleIR(string const& _contractName)
 
 void CommandLineInterface::handleIROptimized(string const& _contractName)
 {
+	solAssert(m_options.input.mode == InputMode::Compiler || m_options.input.mode == InputMode::CompilerWithASTImport, "");
+
 	if (!m_options.compiler.outputs.irOptimized)
 		return;
 
@@ -218,6 +232,8 @@ void CommandLineInterface::handleIROptimized(string const& _contractName)
 
 void CommandLineInterface::handleEwasm(string const& _contractName)
 {
+	solAssert(m_options.input.mode == InputMode::Compiler || m_options.input.mode == InputMode::CompilerWithASTImport, "");
+
 	if (!m_options.compiler.outputs.ewasm)
 		return;
 
@@ -239,6 +255,8 @@ void CommandLineInterface::handleEwasm(string const& _contractName)
 
 void CommandLineInterface::handleBytecode(string const& _contract)
 {
+	solAssert(m_options.input.mode == InputMode::Compiler || m_options.input.mode == InputMode::CompilerWithASTImport, "");
+
 	if (m_options.compiler.outputs.opcodes)
 		handleOpcode(_contract);
 	if (m_options.compiler.outputs.binary || m_options.compiler.outputs.binaryRuntime)
@@ -247,6 +265,8 @@ void CommandLineInterface::handleBytecode(string const& _contract)
 
 void CommandLineInterface::handleSignatureHashes(string const& _contract)
 {
+	solAssert(m_options.input.mode == InputMode::Compiler || m_options.input.mode == InputMode::CompilerWithASTImport, "");
+
 	if (!m_options.compiler.outputs.signatureHashes)
 		return;
 
@@ -263,6 +283,8 @@ void CommandLineInterface::handleSignatureHashes(string const& _contract)
 
 void CommandLineInterface::handleMetadata(string const& _contract)
 {
+	solAssert(m_options.input.mode == InputMode::Compiler || m_options.input.mode == InputMode::CompilerWithASTImport, "");
+
 	if (!m_options.compiler.outputs.metadata)
 		return;
 
@@ -275,6 +297,8 @@ void CommandLineInterface::handleMetadata(string const& _contract)
 
 void CommandLineInterface::handleABI(string const& _contract)
 {
+	solAssert(m_options.input.mode == InputMode::Compiler || m_options.input.mode == InputMode::CompilerWithASTImport, "");
+
 	if (!m_options.compiler.outputs.abi)
 		return;
 
@@ -287,6 +311,8 @@ void CommandLineInterface::handleABI(string const& _contract)
 
 void CommandLineInterface::handleStorageLayout(string const& _contract)
 {
+	solAssert(m_options.input.mode == InputMode::Compiler || m_options.input.mode == InputMode::CompilerWithASTImport, "");
+
 	if (!m_options.compiler.outputs.storageLayout)
 		return;
 
@@ -299,6 +325,8 @@ void CommandLineInterface::handleStorageLayout(string const& _contract)
 
 void CommandLineInterface::handleNatspec(bool _natspecDev, string const& _contract)
 {
+	solAssert(m_options.input.mode == InputMode::Compiler || m_options.input.mode == InputMode::CompilerWithASTImport, "");
+
 	bool enabled = false;
 	std::string suffix;
 	std::string title;
@@ -339,6 +367,8 @@ void CommandLineInterface::handleNatspec(bool _natspecDev, string const& _contra
 
 void CommandLineInterface::handleGasEstimation(string const& _contract)
 {
+	solAssert(m_options.input.mode == InputMode::Compiler || m_options.input.mode == InputMode::CompilerWithASTImport, "");
+
 	Json::Value estimates = m_compiler->gasEstimates(_contract);
 	sout() << "Gas estimation:" << endl;
 
@@ -377,39 +407,60 @@ void CommandLineInterface::handleGasEstimation(string const& _contract)
 	}
 }
 
-bool CommandLineInterface::readInputFiles()
+void CommandLineInterface::readInputFiles()
 {
 	solAssert(!m_standardJsonInput.has_value(), "");
+
+	if (
+		m_options.input.mode == InputMode::Help ||
+		m_options.input.mode == InputMode::License ||
+		m_options.input.mode == InputMode::Version
+	)
+		return;
 
 	m_fileReader.setBasePath(m_options.input.basePath);
 
 	if (m_fileReader.basePath() != "")
 	{
 		if (!boost::filesystem::exists(m_fileReader.basePath()))
-		{
-			serr() << "Base path does not exist: " << m_fileReader.basePath() << endl;
-			return false;
-		}
+			solThrow(CommandLineValidationError, "Base path does not exist: \"" + m_fileReader.basePath().string() + '"');
 
 		if (!boost::filesystem::is_directory(m_fileReader.basePath()))
-		{
-			serr() << "Base path is not a directory: " << m_fileReader.basePath() << endl;
-			return false;
-		}
+			solThrow(CommandLineValidationError, "Base path is not a directory: \"" + m_fileReader.basePath().string() + '"');
 	}
+
+	for (boost::filesystem::path const& includePath: m_options.input.includePaths)
+		m_fileReader.addIncludePath(includePath);
 
 	for (boost::filesystem::path const& allowedDirectory: m_options.input.allowedDirectories)
 		m_fileReader.allowDirectory(allowedDirectory);
+
+	map<std::string, set<boost::filesystem::path>> collisions =
+		m_fileReader.detectSourceUnitNameCollisions(m_options.input.paths);
+	if (!collisions.empty())
+	{
+		auto pathToQuotedString = [](boost::filesystem::path const& _path){ return "\"" + _path.string() + "\""; };
+
+		string message =
+			"Source unit name collision detected. "
+			"The specified values of base path and/or include paths would result in multiple "
+			"input files being assigned the same source unit name:\n";
+
+		for (auto const& [sourceUnitName, normalizedInputPaths]: collisions)
+		{
+			message += sourceUnitName + " matches: ";
+			message += joinHumanReadable(normalizedInputPaths | ranges::views::transform(pathToQuotedString)) + "\n";
+		}
+
+		solThrow(CommandLineValidationError, message);
+	}
 
 	for (boost::filesystem::path const& infile: m_options.input.paths)
 	{
 		if (!boost::filesystem::exists(infile))
 		{
 			if (!m_options.input.ignoreMissingFiles)
-			{
-				serr() << infile << " is not found." << endl;
-				return false;
-			}
+				solThrow(CommandLineValidationError, '"' + infile.string() + "\" is not found.");
 			else
 				serr() << infile << " is not found. Skipping." << endl;
 
@@ -419,10 +470,7 @@ bool CommandLineInterface::readInputFiles()
 		if (!boost::filesystem::is_regular_file(infile))
 		{
 			if (!m_options.input.ignoreMissingFiles)
-			{
-				serr() << infile << " is not a valid file." << endl;
-				return false;
-			}
+				solThrow(CommandLineValidationError, '"' + infile.string() + "\" is not a valid file.");
 			else
 				serr() << infile << " is not a valid file. Skipping." << endl;
 
@@ -430,7 +478,7 @@ bool CommandLineInterface::readInputFiles()
 		}
 
 		// NOTE: we ignore the FileNotFound exception as we manually check above
-		string fileContent = readFileAsString(infile.string());
+		string fileContent = readFileAsString(infile);
 		if (m_options.input.mode == InputMode::StandardJson)
 		{
 			solAssert(!m_standardJsonInput.has_value(), "");
@@ -438,7 +486,7 @@ bool CommandLineInterface::readInputFiles()
 		}
 		else
 		{
-			m_fileReader.setSource(infile, move(fileContent));
+			m_fileReader.addOrUpdateFile(infile, move(fileContent));
 			m_fileReader.allowDirectory(boost::filesystem::canonical(infile).remove_filename());
 		}
 	}
@@ -451,24 +499,25 @@ bool CommandLineInterface::readInputFiles()
 			m_standardJsonInput = readUntilEnd(m_sin);
 		}
 		else
-			m_fileReader.setSource(g_stdinFileName, readUntilEnd(m_sin));
+			m_fileReader.setStdin(readUntilEnd(m_sin));
 	}
 
-	if (m_fileReader.sourceCodes().empty() && !m_standardJsonInput.has_value())
-	{
-		serr() << "All specified input files either do not exist or are not regular files." << endl;
-		return false;
-	}
-
-	return true;
+	if (
+		m_options.input.mode != InputMode::LanguageServer &&
+		m_fileReader.sourceUnits().empty() &&
+		!m_standardJsonInput.has_value()
+	)
+		solThrow(CommandLineValidationError, "All specified input files either do not exist or are not regular files.");
 }
 
 map<string, Json::Value> CommandLineInterface::parseAstFromInput()
 {
+	solAssert(m_options.input.mode == InputMode::CompilerWithASTImport, "");
+
 	map<string, Json::Value> sourceJsons;
 	map<string, string> tmpSources;
 
-	for (SourceCode const& sourceCode: m_fileReader.sourceCodes() | ranges::views::values)
+	for (SourceCode const& sourceCode: m_fileReader.sourceUnits() | ranges::views::values)
 	{
 		Json::Value ast;
 		astAssert(jsonParseStrict(sourceCode, ast), "Input file could not be parsed to JSON");
@@ -486,7 +535,7 @@ map<string, Json::Value> CommandLineInterface::parseAstFromInput()
 		}
 	}
 
-	m_fileReader.setSources(tmpSources);
+	m_fileReader.setSourceUnits(tmpSources);
 
 	return sourceJsons;
 }
@@ -504,19 +553,12 @@ void CommandLineInterface::createFile(string const& _fileName, string const& _da
 
 	string pathName = (m_options.output.dir / _fileName).string();
 	if (fs::exists(pathName) && !m_options.output.overwriteFiles)
-	{
-		serr() << "Refusing to overwrite existing file \"" << pathName << "\" (use --overwrite to force)." << endl;
-		m_error = true;
-		return;
-	}
+		solThrow(CommandLineOutputError, "Refusing to overwrite existing file \"" + pathName + "\" (use --overwrite to force).");
+
 	ofstream outFile(pathName);
 	outFile << _data;
 	if (!outFile)
-	{
-		serr() << "Could not write to file \"" << pathName << "\"." << endl;
-		m_error = true;
-		return;
-	}
+		solThrow(CommandLineOutputError, "Could not write to file \"" + pathName + "\".");
 }
 
 void CommandLineInterface::createJson(string const& _fileName, string const& _json)
@@ -524,22 +566,62 @@ void CommandLineInterface::createJson(string const& _fileName, string const& _js
 	createFile(boost::filesystem::basename(_fileName) + string(".json"), _json);
 }
 
+bool CommandLineInterface::run(int _argc, char const* const* _argv)
+{
+	try
+	{
+		if (!parseArguments(_argc, _argv))
+			return false;
+
+		readInputFiles();
+		processInput();
+		return true;
+	}
+	catch (CommandLineError const& _exception)
+	{
+		m_hasOutput = true;
+
+		// There might be no message in the exception itself if the error output is bulky and has
+		// already been printed to stderr (this happens e.g. for compiler errors).
+		if (_exception.what() != ""s)
+			serr() << _exception.what() << endl;
+
+		return false;
+	}
+}
+
 bool CommandLineInterface::parseArguments(int _argc, char const* const* _argv)
 {
-	CommandLineParser parser(sout(/* _markAsUsed */ false), serr(/* _markAsUsed */ false));
-	bool success = parser.parse(_argc, _argv, isatty(fileno(stdin)));
-	if (!success)
+	CommandLineParser parser;
+
+	if (isatty(fileno(stdin)) && _argc == 1)
+	{
+		// If the terminal is taking input from the user, provide more user-friendly output.
+		CommandLineParser::printHelp(sout());
+
+		// In this case we want to exit with an error but not display any error message.
 		return false;
-	m_hasOutput = m_hasOutput || parser.hasOutput();
+	}
+
+	parser.parse(_argc, _argv);
 	m_options = parser.options();
 
 	return true;
 }
 
-bool CommandLineInterface::processInput()
+void CommandLineInterface::processInput()
 {
 	switch (m_options.input.mode)
 	{
+	case InputMode::Help:
+		CommandLineParser::printHelp(sout());
+		break;
+	case InputMode::License:
+		printLicense();
+		break;
+	case InputMode::Version:
+		printVersion();
+		break;
 	case InputMode::StandardJson:
 	{
 		solAssert(m_standardJsonInput.has_value(), "");
@@ -547,30 +629,39 @@ bool CommandLineInterface::processInput()
 		StandardCompiler compiler(m_fileReader.reader(), m_options.formatting.json);
 		sout() << compiler.compile(move(m_standardJsonInput.value())) << endl;
 		m_standardJsonInput.reset();
-		return true;
+		break;
 	}
+	case InputMode::LanguageServer:
+		serveLSP();
+		break;
 	case InputMode::Assembler:
-	{
-		return assemble(
-			m_options.assembly.inputLanguage,
-			m_options.assembly.targetMachine,
-			m_options.optimizer.enabled,
-			m_options.optimizer.expectedExecutionsPerDeployment,
-			m_options.optimizer.yulSteps
-		);
-	}
+		assemble(m_options.assembly.inputLanguage, m_options.assembly.targetMachine);
+		break;
 	case InputMode::Linker:
-		return link();
+		link();
+		writeLinkedFiles();
+		break;
 	case InputMode::Compiler:
 	case InputMode::CompilerWithASTImport:
-		return compile();
+		compile();
+		outputCompilationResults();
 	}
-
-	solAssert(false, "");
-	return false;
 }
 
-bool CommandLineInterface::compile()
+void CommandLineInterface::printVersion()
+{
+	sout() << "solc, the solidity compiler commandline interface" << endl;
+	sout() << "Version: " << solidity::frontend::VersionString << endl;
+}
+
+void CommandLineInterface::printLicense()
+{
+	sout() << otherLicenses << endl;
+	// This is a static variable generated by cmake from LICENSE.txt
+	sout() << licenseText << endl;
+}
+
+void CommandLineInterface::compile()
 {
 	solAssert(m_options.input.mode == InputMode::Compiler || m_options.input.mode == InputMode::CompilerWithASTImport, "");
 
@@ -590,21 +681,34 @@ bool CommandLineInterface::compile()
 		m_compiler->setViaIR(m_options.output.experimentalViaIR);
 		m_compiler->setEVMVersion(m_options.output.evmVersion);
 		m_compiler->setRevertStringBehaviour(m_options.output.revertStrings);
+		if (m_options.output.debugInfoSelection.has_value())
+			m_compiler->selectDebugInfo(m_options.output.debugInfoSelection.value());
 		// TODO: Perhaps we should not compile unless requested
 
 		m_compiler->enableIRGeneration(m_options.compiler.outputs.ir || m_options.compiler.outputs.irOptimized);
 		m_compiler->enableEwasmGeneration(m_options.compiler.outputs.ewasm);
+		m_compiler->enableEvmBytecodeGeneration(
+			m_options.compiler.estimateGas ||
+			m_options.compiler.outputs.asm_ ||
+			m_options.compiler.outputs.asmJson ||
+			m_options.compiler.outputs.opcodes ||
+			m_options.compiler.outputs.binary ||
+			m_options.compiler.outputs.binaryRuntime ||
+			(m_options.compiler.combinedJsonRequests && (
+				m_options.compiler.combinedJsonRequests->binary ||
+				m_options.compiler.combinedJsonRequests->binaryRuntime ||
+				m_options.compiler.combinedJsonRequests->opcodes ||
+				m_options.compiler.combinedJsonRequests->asm_ ||
+				m_options.compiler.combinedJsonRequests->generatedSources ||
+				m_options.compiler.combinedJsonRequests->generatedSourcesRuntime ||
+				m_options.compiler.combinedJsonRequests->srcMap ||
+				m_options.compiler.combinedJsonRequests->srcMapRuntime ||
+				m_options.compiler.combinedJsonRequests->funDebug ||
+				m_options.compiler.combinedJsonRequests->funDebugRuntime
+			))
+		);
 
-		OptimiserSettings settings = m_options.optimizer.enabled ? OptimiserSettings::standard() : OptimiserSettings::minimal();
-		if (m_options.optimizer.expectedExecutionsPerDeployment.has_value())
-			settings.expectedExecutionsPerDeployment = m_options.optimizer.expectedExecutionsPerDeployment.value();
-		if (m_options.optimizer.noOptimizeYul)
-			settings.runYulOptimiser = false;
-
-		if (m_options.optimizer.yulSteps.has_value())
-			settings.yulOptimiserSteps = m_options.optimizer.yulSteps.value();
-		settings.optimizeStackAllocation = settings.runYulOptimiser;
-		m_compiler->setOptimiserSettings(settings);
+		m_compiler->setOptimiserSettings(m_options.optimiserSettings());
 
 		if (m_options.input.mode == InputMode::CompilerWithASTImport)
 		{
@@ -620,13 +724,14 @@ bool CommandLineInterface::compile()
 			}
 			catch (Exception const& _exc)
 			{
-				serr() << string("Failed to import AST: ") << _exc.what() << endl;
-				return false;
+				// FIXME: AST import is missing proper validations. This hack catches failing
+				// assertions and presents them as if they were compiler errors.
+				solThrow(CommandLineExecutionError, "Failed to import AST: "s + _exc.what());
 			}
 		}
 		else
 		{
-			m_compiler->setSources(m_fileReader.sourceCodes());
+			m_compiler->setSources(m_fileReader.sourceUnits());
 			m_compiler->setParserErrorRecovery(m_options.input.errorRecovery);
 		}
 
@@ -638,74 +743,35 @@ bool CommandLineInterface::compile()
 			formatter.printErrorInformation(*error);
 		}
 
-		if (!successful)
-			return m_options.input.errorRecovery;
+		if (!successful && !m_options.input.errorRecovery)
+			solThrow(CommandLineExecutionError, "");
 	}
 	catch (CompilerError const& _exception)
 	{
 		m_hasOutput = true;
 		formatter.printExceptionInformation(_exception, "Compiler error");
-		return false;
-	}
-	catch (InternalCompilerError const& _exception)
-	{
-		serr() <<
-			"Internal compiler error during compilation:" <<
-			endl <<
-			boost::diagnostic_information(_exception);
-		return false;
-	}
-	catch (UnimplementedFeatureError const& _exception)
-	{
-		serr() <<
-			"Unimplemented feature:" <<
-			endl <<
-			boost::diagnostic_information(_exception);
-		return false;
-	}
-	catch (smtutil::SMTLogicError const& _exception)
-	{
-		serr() <<
-			"SMT logic error during analysis:" <<
-			endl <<
-			boost::diagnostic_information(_exception);
-		return false;
+		solThrow(CommandLineExecutionError, "");
 	}
 	catch (Error const& _error)
 	{
 		if (_error.type() == Error::Type::DocstringParsingError)
-			serr() << "Documentation parsing error: " << *boost::get_error_info<errinfo_comment>(_error) << endl;
+		{
+			serr() << *boost::get_error_info<errinfo_comment>(_error);
+			solThrow(CommandLineExecutionError, "Documentation parsing failed.");
+		}
 		else
 		{
 			m_hasOutput = true;
 			formatter.printExceptionInformation(_error, _error.typeName());
+			solThrow(CommandLineExecutionError, "");
 		}
-
-		return false;
 	}
-	catch (Exception const& _exception)
-	{
-		serr() << "Exception during compilation: " << boost::diagnostic_information(_exception) << endl;
-		return false;
-	}
-	catch (std::exception const& _e)
-	{
-		serr() << "Unknown exception during compilation" << (
-			_e.what() ? ": " + string(_e.what()) : "."
-		) << endl;
-		return false;
-	}
-	catch (...)
-	{
-		serr() << "Unknown exception during compilation." << endl;
-		return false;
-	}
-
-	return true;
 }
 
 void CommandLineInterface::handleCombinedJSON()
 {
+	solAssert(m_options.input.mode == InputMode::Compiler || m_options.input.mode == InputMode::CompilerWithASTImport, "");
+
 	if (!m_options.compiler.combinedJsonRequests.has_value())
 		return;
 
@@ -779,7 +845,7 @@ void CommandLineInterface::handleCombinedJSON()
 	if (m_options.compiler.combinedJsonRequests->ast)
 	{
 		output[g_strSources] = Json::Value(Json::objectValue);
-		for (auto const& sourceCode: m_fileReader.sourceCodes())
+		for (auto const& sourceCode: m_fileReader.sourceUnits())
 		{
 			ASTJsonConverter converter(m_compiler->state(), m_compiler->sourceIndices());
 			output[g_strSources][sourceCode.first] = Json::Value(Json::objectValue);
@@ -796,16 +862,18 @@ void CommandLineInterface::handleCombinedJSON()
 
 void CommandLineInterface::handleAst()
 {
+	solAssert(m_options.input.mode == InputMode::Compiler || m_options.input.mode == InputMode::CompilerWithASTImport, "");
+
 	if (!m_options.compiler.outputs.astCompactJson)
 		return;
 
 	vector<ASTNode const*> asts;
-	for (auto const& sourceCode: m_fileReader.sourceCodes())
+	for (auto const& sourceCode: m_fileReader.sourceUnits())
 		asts.push_back(&m_compiler->ast(sourceCode.first));
 
 	if (!m_options.output.dir.empty())
 	{
-		for (auto const& sourceCode: m_fileReader.sourceCodes())
+		for (auto const& sourceCode: m_fileReader.sourceUnits())
 		{
 			stringstream data;
 			string postfix = "";
@@ -818,7 +886,7 @@ void CommandLineInterface::handleAst()
 	else
 	{
 		sout() << "JSON AST (compact format):" << endl << endl;
-		for (auto const& sourceCode: m_fileReader.sourceCodes())
+		for (auto const& sourceCode: m_fileReader.sourceUnits())
 		{
 			sout() << endl << "======= " << sourceCode.first << " =======" << endl;
 			ASTJsonConverter(m_compiler->state(), m_compiler->sourceIndices()).print(sout(), m_compiler->ast(sourceCode.first));
@@ -826,23 +894,17 @@ void CommandLineInterface::handleAst()
 	}
 }
 
-bool CommandLineInterface::actOnInput()
+void CommandLineInterface::serveLSP()
 {
-	if (m_options.input.mode == InputMode::StandardJson || m_options.input.mode == InputMode::Assembler)
-		// Already done in "processInput" phase.
-		return true;
-	else if (m_options.input.mode == InputMode::Linker)
-		writeLinkedFiles();
-	else
-	{
-		solAssert(m_options.input.mode == InputMode::Compiler || m_options.input.mode == InputMode::CompilerWithASTImport, "");
-		outputCompilationResults();
-	}
-	return !m_error;
+	lsp::IOStreamTransport transport;
+	if (!lsp::LanguageServer{transport}.run())
+		solThrow(CommandLineExecutionError, "LSP terminated abnormally.");
 }
 
-bool CommandLineInterface::link()
+void CommandLineInterface::link()
 {
+	solAssert(m_options.input.mode == InputMode::Linker, "");
+
 	// Map from how the libraries will be named inside the bytecode to their addresses.
 	map<string, h160> librariesReplacements;
 	int const placeholderSize = 40; // 20 bytes or 40 hex characters
@@ -863,7 +925,7 @@ bool CommandLineInterface::link()
 		librariesReplacements[replacement] = library.second;
 	}
 
-	FileReader::StringMap sourceCodes = m_fileReader.sourceCodes();
+	FileReader::StringMap sourceCodes = m_fileReader.sourceUnits();
 	for (auto& src: sourceCodes)
 	{
 		auto end = src.second.end();
@@ -877,11 +939,11 @@ bool CommandLineInterface::link()
 				*(it + placeholderSize - 2) != '_' ||
 				*(it + placeholderSize - 1) != '_'
 			)
-			{
-				serr() << "Error in binary object file " << src.first << " at position " << (it - src.second.begin()) << endl;
-				serr() << '"' << string(it, it + min(placeholderSize, static_cast<int>(end - it))) << "\" is not a valid link reference." << endl;
-				return false;
-			}
+				solThrow(
+					CommandLineExecutionError,
+					"Error in binary object file " + src.first + " at position " + to_string(it - src.second.begin()) + "\n" +
+					'"' + string(it, it + min(placeholderSize, static_cast<int>(end - it))) + "\" is not a valid link reference."
+				);
 
 			string foundPlaceholder(it, it + placeholderSize);
 			if (librariesReplacements.count(foundPlaceholder))
@@ -899,14 +961,14 @@ bool CommandLineInterface::link()
 		while (!src.second.empty() && *prev(src.second.end()) == '\n')
 			src.second.resize(src.second.size() - 1);
 	}
-	m_fileReader.setSources(move(sourceCodes));
-
-	return true;
+	m_fileReader.setSourceUnits(move(sourceCodes));
 }
 
 void CommandLineInterface::writeLinkedFiles()
 {
-	for (auto const& src: m_fileReader.sourceCodes())
+	solAssert(m_options.input.mode == InputMode::Linker, "");
+
+	for (auto const& src: m_fileReader.sourceUnits())
 		if (src.first == g_stdinFileName)
 			sout() << src.second << endl;
 		else
@@ -914,10 +976,7 @@ void CommandLineInterface::writeLinkedFiles()
 			ofstream outFile(src.first);
 			outFile << src.second;
 			if (!outFile)
-			{
-				serr() << "Could not write to file " << src.first << ". Aborting." << endl;
-				return;
-			}
+				solThrow(CommandLineOutputError, "Could not write to file " + src.first + ". Aborting.");
 		}
 	sout() << "Linking completed." << endl;
 }
@@ -939,52 +998,32 @@ string CommandLineInterface::objectWithLinkRefsHex(evmasm::LinkerObject const& _
 	return out;
 }
 
-bool CommandLineInterface::assemble(
-	yul::AssemblyStack::Language _language,
-	yul::AssemblyStack::Machine _targetMachine,
-	bool _optimize,
-	optional<unsigned int> _expectedExecutionsPerDeployment,
-	optional<string> _yulOptimiserSteps
-)
+void CommandLineInterface::assemble(yul::AssemblyStack::Language _language, yul::AssemblyStack::Machine _targetMachine)
 {
-	solAssert(_optimize || !_yulOptimiserSteps.has_value(), "");
+	solAssert(m_options.input.mode == InputMode::Assembler, "");
+
+	serr() << "Warning: Yul is still experimental. Please use the output with care." << endl;
 
 	bool successful = true;
 	map<string, yul::AssemblyStack> assemblyStacks;
-	for (auto const& src: m_fileReader.sourceCodes())
+	for (auto const& src: m_fileReader.sourceUnits())
 	{
-		OptimiserSettings settings = _optimize ? OptimiserSettings::full() : OptimiserSettings::minimal();
-		if (_expectedExecutionsPerDeployment.has_value())
-			settings.expectedExecutionsPerDeployment = _expectedExecutionsPerDeployment.value();
-		if (_yulOptimiserSteps.has_value())
-			settings.yulOptimiserSteps = _yulOptimiserSteps.value();
+		// --no-optimize-yul option is not accepted in assembly mode.
+		solAssert(!m_options.optimizer.noOptimizeYul, "");
 
-		auto& stack = assemblyStacks[src.first] = yul::AssemblyStack(m_options.output.evmVersion, _language, settings);
-		try
-		{
-			if (!stack.parseAndAnalyze(src.first, src.second))
-				successful = false;
-			else
-				stack.optimize();
-		}
-		catch (Exception const& _exception)
-		{
-			serr() << "Exception in assembler: " << boost::diagnostic_information(_exception) << endl;
-			return false;
-		}
-		catch (std::exception const& _e)
-		{
-			serr() <<
-				"Unknown exception during compilation" <<
-				(_e.what() ? ": " + string(_e.what()) : ".") <<
-				endl;
-			return false;
-		}
-		catch (...)
-		{
-			serr() << "Unknown exception in assembler." << endl;
-			return false;
-		}
+		auto& stack = assemblyStacks[src.first] = yul::AssemblyStack(
+			m_options.output.evmVersion,
+			_language,
+			m_options.optimiserSettings(),
+			m_options.output.debugInfoSelection.has_value() ?
+				m_options.output.debugInfoSelection.value() :
+				DebugInfoSelection::Default()
+		);
+
+		if (!stack.parseAndAnalyze(src.first, src.second))
+			successful = false;
+		else
+			stack.optimize();
 	}
 
 	for (auto const& sourceAndStack: assemblyStacks)
@@ -997,14 +1036,17 @@ bool CommandLineInterface::assemble(
 			m_hasOutput = true;
 			formatter.printErrorInformation(*error);
 		}
-		if (!Error::containsOnlyWarnings(stack.errors()))
+		if (Error::containsErrors(stack.errors()))
 			successful = false;
 	}
 
 	if (!successful)
-		return false;
+	{
+		solAssert(m_hasOutput);
+		solThrow(CommandLineExecutionError, "");
+	}
 
-	for (auto const& src: m_fileReader.sourceCodes())
+	for (auto const& src: m_fileReader.sourceUnits())
 	{
 		string machine =
 			_targetMachine == yul::AssemblyStack::Machine::EVM ? "EVM" :
@@ -1013,82 +1055,59 @@ bool CommandLineInterface::assemble(
 
 		yul::AssemblyStack& stack = assemblyStacks[src.first];
 
-		sout() << endl << "Pretty printed source:" << endl;
-		sout() << stack.print() << endl;
-
-		if (_language != yul::AssemblyStack::Language::Ewasm && _targetMachine == yul::AssemblyStack::Machine::Ewasm)
+		if (m_options.compiler.outputs.irOptimized)
 		{
-			try
-			{
-				stack.translate(yul::AssemblyStack::Language::Ewasm);
-				stack.optimize();
-			}
-			catch (Exception const& _exception)
-			{
-				serr() << "Exception in assembler: " << boost::diagnostic_information(_exception) << endl;
-				return false;
-			}
-			catch (std::exception const& _e)
-			{
-				serr() <<
-					"Unknown exception during compilation" <<
-					(_e.what() ? ": " + string(_e.what()) : ".") <<
-					endl;
-				return false;
-			}
-			catch (...)
-			{
-				serr() << "Unknown exception in assembler." << endl;
-				return false;
-			}
-
-			sout() << endl << "==========================" << endl;
-			sout() << endl << "Translated source:" << endl;
+			// NOTE: This actually outputs unoptimized code when the optimizer is disabled but
+			// 'ir' output in StandardCompiler works the same way.
+			sout() << endl << "Pretty printed source:" << endl;
 			sout() << stack.print() << endl;
 		}
 
+		if (_language != yul::AssemblyStack::Language::Ewasm && _targetMachine == yul::AssemblyStack::Machine::Ewasm)
+		{
+			stack.translate(yul::AssemblyStack::Language::Ewasm);
+			stack.optimize();
+
+			if (m_options.compiler.outputs.ewasmIR)
+			{
+				sout() << endl << "==========================" << endl;
+				sout() << endl << "Translated source:" << endl;
+				sout() << stack.print() << endl;
+			}
+		}
+
 		yul::MachineAssemblyObject object;
-		try
+		object = stack.assemble(_targetMachine);
+		object.bytecode->link(m_options.linker.libraries);
+
+		if (m_options.compiler.outputs.binary)
 		{
-			object = stack.assemble(_targetMachine);
-			object.bytecode->link(m_options.linker.libraries);
-		}
-		catch (Exception const& _exception)
-		{
-			serr() << "Exception while assembling: " << boost::diagnostic_information(_exception) << endl;
-			return false;
-		}
-		catch (std::exception const& _e)
-		{
-			serr() << "Unknown exception during compilation" << (
-				_e.what() ? ": " + string(_e.what()) : "."
-			) << endl;
-			return false;
-		}
-		catch (...)
-		{
-			serr() << "Unknown exception while assembling." << endl;
-			return false;
+			sout() << endl << "Binary representation:" << endl;
+			if (object.bytecode)
+				sout() << object.bytecode->toHex() << endl;
+			else
+				serr() << "No binary representation found." << endl;
 		}
 
-		sout() << endl << "Binary representation:" << endl;
-		if (object.bytecode)
-			sout() << object.bytecode->toHex() << endl;
-		else
-			serr() << "No binary representation found." << endl;
-
-		sout() << endl << "Text representation:" << endl;
-		if (!object.assembly.empty())
-			sout() << object.assembly << endl;
-		else
-			serr() << "No text representation found." << endl;
+		solAssert(_targetMachine == yul::AssemblyStack::Machine::Ewasm || _targetMachine == yul::AssemblyStack::Machine::EVM, "");
+		if (
+			(_targetMachine == yul::AssemblyStack::Machine::EVM && m_options.compiler.outputs.asm_) ||
+			(_targetMachine == yul::AssemblyStack::Machine::Ewasm && m_options.compiler.outputs.ewasm)
+		)
+		{
+			sout() << endl << "Text representation:" << endl;
+			if (!object.assembly.empty())
+				sout() << object.assembly << endl;
+			else
+				serr() << "No text representation found." << endl;
+		}
 	}
-
-	return true;
 }
 
 void CommandLineInterface::outputCompilationResults()
 {
+	solAssert(m_options.input.mode == InputMode::Compiler || m_options.input.mode == InputMode::CompilerWithASTImport, "");
+
 	handleCombinedJSON();
 
 	// do we need AST output?
@@ -1116,16 +1135,12 @@ void CommandLineInterface::outputCompilationResults()
 			if (m_options.compiler.outputs.asmJson)
 				ret = jsonPrettyPrint(removeNullMembers(m_compiler->assemblyJSON(contract)));
 			else
-				ret = m_compiler->assemblyString(contract, m_fileReader.sourceCodes());
+				ret = m_compiler->assemblyString(contract, m_fileReader.sourceUnits());
 
 			if (!m_options.output.dir.empty())
-			{
 				createFile(m_compiler->filesystemFriendlyName(contract) + (m_options.compiler.outputs.asmJson ? "_evm.json" : ".evm"), ret);
-			}
 			else
-			{
 				sout() << "EVM assembly:" << endl << ret << endl;
-			}
 		}
 
 		if (m_options.compiler.estimateGas)
